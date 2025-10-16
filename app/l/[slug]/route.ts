@@ -13,10 +13,10 @@ function hashIp(ip: string | null | undefined) {
 }
 
 export async function GET(req: Request, ctx: { params: { slug: string } }) {
-  const started = Date.now();
+  const t0 = Date.now();
   const slug = (ctx.params?.slug || "").trim();
 
-  // 1) Find the link
+  // 1) Lookup link
   const { data: link, error: linkErr } = await supabaseAdmin
     .from("links")
     .select("id, destination_url")
@@ -24,22 +24,25 @@ export async function GET(req: Request, ctx: { params: { slug: string } }) {
     .single();
 
   if (linkErr || !link) {
-    // Soft 404 to home if slug not found
-    return NextResponse.redirect(new URL("/", req.url), { status: 302 });
+    const res404 = NextResponse.redirect(new URL("/", req.url), { status: 302 });
+    res404.headers.set("Cache-Control", "no-store");
+    res404.headers.set("X-AffiFlow-Redirect", "miss");
+    res404.headers.set("X-Click-Status", "link-not-found");
+    res404.headers.set("X-RTT", String(Date.now() - t0));
+    return res404;
   }
 
-  // Collect request context (best-effort)
+  // 2) Prepare click fields
   const ip =
-    // Vercel
-    (req.headers.get("x-forwarded-for") || "").split(",")[0]?.trim() ||
-    // Node fallback
-    undefined;
-
+    (req.headers.get("x-forwarded-for") || "").split(",")[0]?.trim() || undefined;
   const ua = req.headers.get("user-agent") || null;
   const referer = req.headers.get("referer") || null;
   const ip_hash = hashIp(ip);
 
-  // 2) Insert click (best-effort; don’t block redirect)
+  // 3) Insert click (best-effort, but we expose status in headers)
+  let clickStatus = "ok";
+  let clickError: string | null = null;
+
   try {
     const { error: clickErr } = await supabaseAdmin.from("clicks").insert({
       link_id: link.id,
@@ -48,20 +51,24 @@ export async function GET(req: Request, ctx: { params: { slug: string } }) {
       referer,
     });
     if (clickErr) {
-      // You can log this to Vercel runtime logs when debugging:
-      // console.error("click insert error:", clickErr.message);
+      clickStatus = "error";
+      clickError = clickErr.message ?? String(clickErr);
+      // Log to Vercel runtime logs so you can see it from the UI
+      console.error("[/l/[slug]] click insert error:", clickError);
     }
-  } catch {
-    // swallow errors so redirect still happens
+  } catch (e: any) {
+    clickStatus = "error";
+    clickError = e?.message ?? "unknown error";
+    console.error("[/l/[slug]] click insert exception:", clickError);
   }
 
-  // 3) Redirect to destination
+  // 4) Redirect
   const dest = link.destination_url || "/";
   const res = NextResponse.redirect(dest, 302);
-
-  // conservative caching to avoid double counting by caches
   res.headers.set("Cache-Control", "no-store");
   res.headers.set("X-AffiFlow-Redirect", "1");
-  res.headers.set("X-RTT", String(Date.now() - started));
+  res.headers.set("X-Click-Status", clickStatus);
+  if (clickError) res.headers.set("X-Click-Error", clickError.slice(0, 200));
+  res.headers.set("X-RTT", String(Date.now() - t0));
   return res;
 }
