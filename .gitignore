@@ -1,45 +1,40 @@
-cat > .gitignore << 'EOF'
+# Node / Next.js
 node_modules/
+.npm/
+.pnpm-store/
 .next/
 out/
+dist/
+coverage/
+.cache/
+
+# Environment & local config
 .env
 .env.*
 !.env.example
+.vercel/
+.supabase/
+supabase/.temp/
+supabase/.branches/
+.vscode/
+
+# OS / editor
 .DS_Store
 Thumbs.db
-EOF
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+*.log
+*.tmp
 
-# dependencies
-/node_modules
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files
-.env*
-
-# vercel
-.vercel
-
-# typescript
+# TypeScript
 *.tsbuildinfo
-next-env.d.ts
 
-# Local artifacts
-affiliate-marketing-app@0.1.0
-app/dev/page.backup.tsx
-main
-next
+# Lockfiles (keep the one you use)
+# If you use npm:
+# yarn.lock
+# If you use yarn:
+package-lock.json
+# If you use pnpm:
+# pnpm-lock.yaml
 
-.vercel
+# Build artifacts
+*.map
+
