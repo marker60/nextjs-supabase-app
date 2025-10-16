@@ -1,42 +1,67 @@
 // [LABEL: FILE] app/l/[slug]/route.ts
-import { supabaseAdmin } from "@/lib/supabase/server";
-import crypto from "node:crypto";
 import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import crypto from "crypto";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-function getIP(req: Request) {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim();
-  const cf = req.headers.get("cf-connecting-ip");
-  if (cf) return cf.trim();
-  return req.headers.get("x-real-ip") || null;
-}
-function hashIP(ip: string | null) {
-  if (!ip) return null;
-  const secret = process.env.LINK_IP_HASH_SECRET || "fallback-secret";
-  return crypto.createHash("sha256").update(`${ip}:${secret}`).digest("hex");
+function hashIp(ip: string | null | undefined) {
+  const secret = process.env.LINK_IP_HASH_SECRET || "";
+  const val = (ip || "0.0.0.0") + "|" + secret;
+  return crypto.createHash("sha256").update(val).digest("hex").slice(0, 32);
 }
 
 export async function GET(req: Request, ctx: { params: { slug: string } }) {
-  const { slug } = ctx.params;
+  const started = Date.now();
+  const slug = (ctx.params?.slug || "").trim();
 
-  const { data: link, error } = await supabaseAdmin
+  // 1) Find the link
+  const { data: link, error: linkErr } = await supabaseAdmin
     .from("links")
     .select("id, destination_url")
     .eq("slug", slug)
     .single();
 
-  if (error || !link) return new NextResponse("Not Found", { status: 404 });
+  if (linkErr || !link) {
+    // Soft 404 to home if slug not found
+    return NextResponse.redirect(new URL("/", req.url), { status: 302 });
+  }
 
-  const ip = getIP(req);
+  // Collect request context (best-effort)
+  const ip =
+    // Vercel
+    (req.headers.get("x-forwarded-for") || "").split(",")[0]?.trim() ||
+    // Node fallback
+    undefined;
+
   const ua = req.headers.get("user-agent") || null;
-  const ref = req.headers.get("referer") || null;
+  const referer = req.headers.get("referer") || null;
+  const ip_hash = hashIp(ip);
 
-  // fire-and-forget insert
-  void supabaseAdmin.from("clicks").insert([
-    { link_id: link.id, ip_hash: hashIP(ip), user_agent: ua, referrer: ref },
-  ]);
+  // 2) Insert click (best-effort; don’t block redirect)
+  try {
+    const { error: clickErr } = await supabaseAdmin.from("clicks").insert({
+      link_id: link.id,
+      ip_hash,
+      ua,
+      referer,
+    });
+    if (clickErr) {
+      // You can log this to Vercel runtime logs when debugging:
+      // console.error("click insert error:", clickErr.message);
+    }
+  } catch {
+    // swallow errors so redirect still happens
+  }
 
-  return NextResponse.redirect(link.destination_url, { status: 302 });
+  // 3) Redirect to destination
+  const dest = link.destination_url || "/";
+  const res = NextResponse.redirect(dest, 302);
+
+  // conservative caching to avoid double counting by caches
+  res.headers.set("Cache-Control", "no-store");
+  res.headers.set("X-AffiFlow-Redirect", "1");
+  res.headers.set("X-RTT", String(Date.now() - started));
+  return res;
 }
