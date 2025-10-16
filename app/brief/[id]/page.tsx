@@ -1,100 +1,134 @@
 // [LABEL: FILE] app/brief/[id]/page.tsx
+// [LABEL: PURPOSE] Loads a brief by UUID and lets user edit the title, saving via /api/brief/save.
+// [LABEL: RENDER] Simple, resilient UI with friendly errors; no schema changes required.
+
 "use client";
 
-import React from "react";
-import Link from "next/link";
-import { useParams } from "next/navigation";
+import * as React from "react";
 
-type Brief = {
-  id: string;
-  title: string | null;
-  created_at: string;
-};
+// [LABEL: TYPES]
+type Brief = { id: string; title: string; created_at?: string };
 
-export default function BriefDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const [item, setItem] = React.useState<Brief | null>(null);
+// [LABEL: HELPERS]
+async function fetchBrief(id: string): Promise<{ ok: boolean; data?: Brief; error?: string }> {
+  try {
+    const res = await fetch(`/api/brief/${id}`, { cache: "no-store" });
+    const json = await res.json();
+    if (!res.ok || json.ok === false) return { ok: false, error: json.error || "Failed to load brief" };
+    // Endpoint returns JSON per your current build; normalize:
+    const data: Brief = json?.data ?? json; 
+    return { ok: true, data };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || "Network error" };
+  }
+}
+
+async function saveBrief(id: string, title: string) {
+  const res = await fetch("/api/brief/save", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, title }),
+  });
+  return res.json();
+}
+
+// [LABEL: COMPONENT]
+export default function BriefDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
+  const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(false);
-
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setItem(null);
-
-    try {
-      const safeId = String(id || "").trim();
-      if (!safeId || safeId === "<id>") {
-        throw new Error(
-          "No ID provided. Open this page from the Briefs list so it includes the real ID."
-        );
-      }
-
-      const res = await fetch(`/api/brief/${safeId}`, { cache: "no-store" });
-      const text = await res.text();
-
-      // Try JSON; if HTML came back, show a clear error
-      try {
-        const json = JSON.parse(text);
-        if (!json.ok) throw new Error(json.error || `Request failed: ${res.status}`);
-        setItem(json.item as Brief);
-      } catch {
-        // text was not JSON (likely an HTML error/redirect)
-        throw new Error(
-          `Server returned non-JSON (${res.status}). Open from the Briefs list to load a valid ID.`
-        );
-      }
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
+  const [brief, setBrief] = React.useState<Brief | null>(null);
+  const [title, setTitle] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [savedMsg, setSavedMsg] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    load();
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      const result = await fetchBrief(id);
+      if (cancelled) return;
+      if (!result.ok) {
+        setError(result.error || "Unable to load brief");
+      } else {
+        setBrief(result.data!);
+        setTitle(result.data!.title || "");
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setSavedMsg(null);
+    setError(null);
+    try {
+      const data = await saveBrief(id, title.trim());
+      if (data?.ok) {
+        setSavedMsg("Saved!");
+        setBrief(prev => (prev ? { ...prev, title: title.trim() } : prev));
+      } else {
+        setError(data?.error || "Save failed");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Save failed");
+    } finally {
+      setSaving(false);
+      // Auto-clear the saved message after a short delay
+      setTimeout(() => setSavedMsg(null), 1500);
+    }
+  };
 
   return (
-    <div className="max-w-3xl mx-auto p-6 space-y-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Edit Brief</h1>
-        <Link href="/brief" className="px-3 py-2 rounded-md border">
-          ← All Briefs
-        </Link>
-      </header>
+    <div className="max-w-2xl mx-auto p-6 space-y-6">
+      {/* [LABEL: HEADER] */}
+      <div className="space-y-2">
+        <h1 className="text-2xl font-semibold">Brief</h1>
+        <p className="text-sm text-gray-500">ID: <span className="font-mono">{id}</span></p>
+      </div>
 
-      {error ? (
-        <div className="rounded-md border p-4 text-red-500">
-          <div className="font-semibold">Draft</div>
-          <div className="mt-1">
-            Couldn’t load this draft: {error}
-          </div>
-        </div>
-      ) : loading ? (
-        <div className="text-gray-500">Loading…</div>
-      ) : item ? (
-        <div className="space-y-3">
-          <div className="text-sm text-gray-500">ID: {item.id}</div>
-          <div className="text-xl font-semibold">
-            {item.title || "(untitled)"}
-          </div>
-          <div className="text-sm text-gray-500">
-            Created {new Date(item.created_at).toLocaleString()}
+      {/* [LABEL: STATES] */}
+      {loading && <div className="text-gray-500">Loading…</div>}
+      {error && <div className="text-red-600">Error: {error}</div>}
+
+      {/* [LABEL: FORM] */}
+      {!loading && !error && brief && (
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Title</label>
+            <input
+              className="w-full rounded-lg border px-3 py-2 outline-none"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Enter a title…"
+              maxLength={200}
+              required
+            />
+            <p className="text-xs text-gray-500">Update the brief title and click Save.</p>
           </div>
 
-          {/* Placeholder for your editor form */}
-          <div className="rounded-md border p-4">
-            <div className="text-sm text-gray-500">Editor area</div>
-            <p className="mt-1 text-gray-700">
-              This is where a form/editor would go. For now, this confirms the
-              record is loading correctly.
-            </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg px-4 py-2 border shadow-sm disabled:opacity-60"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            {savedMsg && <span className="text-green-600">{savedMsg}</span>}
           </div>
-        </div>
-      ) : (
-        <div className="text-gray-500">No data.</div>
+        </form>
       )}
+
+      {/* [LABEL: SIDECAR] Friendly tips */}
+      <div className="text-xs text-gray-500">
+        This page uses your existing <code>/api/brief/[id]</code> reader and the new <code>/api/brief/save</code> writer.
+      </div>
     </div>
   );
 }
