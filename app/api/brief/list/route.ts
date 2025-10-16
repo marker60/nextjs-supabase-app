@@ -6,20 +6,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * DEV/Preview friendly list for Briefs:
- * - Uses service role to avoid auth headaches in Preview.
- * - Returns minimal safe fields.
- * - Orders by updated_at desc.
- * - Limit 50 to keep payload small.
- *
- * NOTE: In production you can later switch to user-scoped lists.
+ * Public/preview-friendly list of briefs.
+ * Uses service role; returns minimal fields; newest-first by created_at.
  */
 export async function GET() {
   try {
     const { data, error } = await supabaseAdmin
       .from("briefs")
-      .select("id, title, updated_at")
-      .order("updated_at", { ascending: false })
+      .select("id, title, created_at")
+      .order("created_at", { ascending: false })
       .limit(50);
 
     if (error) throw error;
