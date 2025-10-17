@@ -1,35 +1,33 @@
 // [LABEL: FILE] app/api/brief/create/route.ts
+// [LABEL: PURPOSE] Create a new brief with a title; returns { ok, id, title }
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
-import { BriefCreate, formatZodError } from "@/lib/validation/brief";
-
-export const runtime = "nodejs";
+import { createClient } from "@supabase/supabase-js";
 
 export async function POST(req: Request) {
   try {
-    const json = await req.json();
-    const parsed = BriefCreate.safeParse(json);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { ok: false, error: formatZodError(parsed.error) },
-        { status: 400 }
-      );
+    const body = await req.json().catch(() => ({} as any));
+    const titleRaw = (body?.title ?? "").toString();
+    const title = titleRaw.trim() || "Untitled";
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    if (!url || !serviceKey) {
+      return NextResponse.json({ ok: false, error: "Missing Supabase env vars" }, { status: 500 });
     }
 
-    const { title, source_url, html, tags } = parsed.data;
+    const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-    const { data, error } = await supabaseAdmin
+    // Insert and return the new row's id + title; table: public.briefs(id uuid pk, title text, created_at timestamptz)
+    const { data, error } = await supabase
       .from("briefs")
-      .insert([{ title, source_url: source_url ?? null, html: html ?? null, tags: tags ?? null }])
-      .select("id")
+      .insert({ title })
+      .select("id, title")
       .single();
 
-    if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-    }
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
 
-    return NextResponse.json({ ok: true, id: data!.id });
-  } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? "Unknown error" }, { status: 500 });
+    return NextResponse.json({ ok: true, id: data!.id, title: data!.title });
+  } catch (err: any) {
+    return NextResponse.json({ ok: false, error: err?.message ?? "Unknown error" }, { status: 500 });
   }
 }

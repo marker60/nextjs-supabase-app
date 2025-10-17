@@ -1,5 +1,5 @@
 // [LABEL: FILE] app/brief/page.tsx
-// [LABEL: PURPOSE] Briefs index with search, sort, pagination, and sparkline (typed for noImplicitAny).
+// [LABEL: PURPOSE] Briefs index + search/sort/pagination + sparkline + "New Brief" button.
 
 "use client";
 import * as React from "react";
@@ -14,7 +14,6 @@ type ListResp =
 
 const PAGE_SIZE = 10;
 
-// Type guard for list rows coming back in various shapes
 function isBriefLike(u: unknown): u is { id: string; title?: unknown; created_at?: unknown } {
   return !!u && typeof (u as any).id === "string";
 }
@@ -30,17 +29,26 @@ async function fetchBriefs(): Promise<Brief[]> {
       : [];
 
   const rows: Brief[] = raw
-    .filter((u: unknown): u is { id: string; title?: unknown; created_at?: unknown } => isBriefLike(u))
-    .map((u: { id: string; title?: unknown; created_at?: unknown }): Brief => ({
+    .filter(isBriefLike)
+    .map((u) => ({
       id: u.id,
       title: typeof u.title === "string" ? u.title : "",
       created_at: typeof u.created_at === "string" ? u.created_at : undefined,
     }))
-    .sort((a: Brief, b: Brief) =>
-      new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
-    );
+    .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
 
   return rows;
+}
+
+async function createBrief(title?: string): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const res = await fetch("/api/brief/create", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title: (title ?? "").trim() }),
+  });
+  const j = await res.json();
+  if (!res.ok || j?.ok === false) return { ok: false, error: j?.error || "Create failed" };
+  return { ok: true, id: j.id };
 }
 
 function useDebounced<T>(value: T, ms = 250) {
@@ -60,6 +68,7 @@ export default function BriefListPage() {
   const [q, setQ] = React.useState("");
   const [sortAsc, setSortAsc] = React.useState(false);
   const [page, setPage] = React.useState(1);
+  const [creating, setCreating] = React.useState(false);
 
   const qd = useDebounced(q, 250);
 
@@ -88,11 +97,9 @@ export default function BriefListPage() {
     const needle = qd.trim().toLowerCase();
     let rows = !needle
       ? all
-      : all.filter((b: Brief) =>
-          (b.title ?? "").toLowerCase().includes(needle) || b.id.toLowerCase().includes(needle)
-        );
+      : all.filter((b) => (b.title ?? "").toLowerCase().includes(needle) || b.id.toLowerCase().includes(needle));
 
-    rows = rows.slice().sort((a: Brief, b: Brief) => {
+    rows = rows.slice().sort((a, b) => {
       const da = new Date(a.created_at ?? 0).getTime();
       const db = new Date(b.created_at ?? 0).getTime();
       return sortAsc ? da - db : db - da;
@@ -106,27 +113,34 @@ export default function BriefListPage() {
   const start = (current - 1) * PAGE_SIZE;
   const pageRows = filtered.slice(start, start + PAGE_SIZE);
 
-  React.useEffect(() => {
-    setPage(1);
-  }, [qd, sortAsc]);
+  React.useEffect(() => setPage(1), [qd, sortAsc]);
 
   const sparkData = React.useMemo(() => {
     if (!all.length) return [] as number[];
     const now = new Date();
     const weeks = 12;
     const buckets = new Array<number>(weeks).fill(0);
-
     for (const b of all) {
       const d = b.created_at ? new Date(b.created_at) : null;
       if (!d || isNaN(d.getTime())) continue;
       const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
       const bucket = Math.floor(diffDays / 7);
-      if (bucket >= 0 && bucket < weeks) {
-        buckets[weeks - 1 - bucket] += 1;
-      }
+      if (bucket >= 0 && bucket < weeks) buckets[weeks - 1 - bucket] += 1;
     }
     return buckets;
   }, [all]);
+
+  const onNew = async () => {
+    try {
+      setCreating(true);
+      const r = await createBrief("New Brief");
+      if (!r.ok || !r.id) throw new Error(r.error || "Create failed");
+      window.location.assign(`/brief/${r.id}`);
+    } catch (e: any) {
+      setError(e?.message || "Create failed");
+      setCreating(false);
+    }
+  };
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
@@ -157,6 +171,14 @@ export default function BriefListPage() {
         >
           Sort: {sortAsc ? "Oldest" : "Newest"}
         </button>
+        <button
+          onClick={onNew}
+          disabled={creating}
+          className="rounded-lg border px-3 py-2 text-sm disabled:opacity-60"
+          title="Create a new brief"
+        >
+          {creating ? "Creating…" : "New Brief"}
+        </button>
       </div>
 
       {loading && <div className="text-gray-500">Loading…</div>}
@@ -168,7 +190,7 @@ export default function BriefListPage() {
             <div className="text-gray-500 text-sm">No briefs match your search.</div>
           ) : (
             <ul className="divide-y rounded-lg border">
-              {pageRows.map((b: Brief) => (
+              {pageRows.map((b) => (
                 <li key={b.id} className="p-4 hover:bg-gray-50 flex items-center justify-between">
                   <div className="min-w-0">
                     <div className="font-medium truncate">{b.title || "(untitled)"}</div>
@@ -198,9 +220,7 @@ export default function BriefListPage() {
               >
                 Prev
               </button>
-              <div className="text-xs text-gray-500">
-                Page {current} of {pageCount}
-              </div>
+              <div className="text-xs text-gray-500">Page {current} of {pageCount}</div>
               <button
                 onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
                 disabled={current === pageCount}
