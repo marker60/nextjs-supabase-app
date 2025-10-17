@@ -1,42 +1,26 @@
 // [LABEL: FILE] app/api/links/list/route.ts
+// [LABEL: PURPOSE] List links for a brief: /api/links/list?brief_id=UUID
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const brief_id = String(searchParams.get("brief_id") || "");
+  if (!brief_id) return NextResponse.json({ ok: false, error: "brief_id required" }, { status: 400 });
 
-export async function GET() {
-  try {
-    // 1) Get latest links (table name only; Supabase defaults to 'public')
-    const { data: links, error } = await supabaseAdmin
-      .from("links")
-      .select("id, slug, title, destination_url, tags, created_at, updated_at")
-      .order("created_at", { ascending: false })
-      .limit(200);
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  if (!url || !serviceKey) return NextResponse.json({ ok: false, error: "Missing Supabase env" }, { status: 500 });
 
-    if (error) throw error;
+  const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
 
-    // 2) Get click rows and aggregate
-    const { data: clicks, error: clickErr } = await supabaseAdmin
-      .from("clicks")
-      .select("link_id");
-    if (clickErr) throw clickErr;
+  const { data, error } = await supabase
+    .from("links")
+    .select("id, brief_id, dest_url, short_id, slug, clicks, last_click_at, created_at")
+    .eq("brief_id", brief_id)
+    .order("created_at", { ascending: false });
 
-    const counts: Record<string, number> = {};
-    (clicks ?? []).forEach((row: any) => {
-      counts[row.link_id] = (counts[row.link_id] || 0) + 1;
-    });
+  if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
 
-    const items = (links ?? []).map((l) => ({
-      ...l,
-      click_count: counts[l.id] || 0,
-    }));
-
-    return NextResponse.json({ ok: true, items });
-  } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unknown error" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({ ok: true, items: data ?? [] });
 }

@@ -1,60 +1,53 @@
 // [LABEL: FILE] app/api/links/create/route.ts
+// [LABEL: PURPOSE] Create a short link for a brief (slug=short_id for older schemas).
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
-import crypto from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
 
-export const runtime = "nodejs";
-
-type Body = {
-  destination_url?: string;
-  title?: string;
-  slug?: string;
-  tags?: string[];
-};
-
-function slugify(input: string) {
-  return input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-    .slice(0, 32);
-}
-function randomSlug(n = 6) {
-  return crypto.randomBytes(n).toString("base64url").replace(/_/g, "").slice(0, n);
+function nanoid(len = 8) {
+  const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let s = "";
+  for (let i = 0; i < len; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return s;
 }
 
 export async function POST(req: Request) {
   try {
-    const { destination_url, title, slug, tags } = (await req.json()) as Body;
+    const body = await req.json().catch(() => ({} as any));
+    const brief_id = String(body?.brief_id || "").trim();
+    const dest_url = String(body?.dest_url || "").trim();
 
-    if (!destination_url || !/^https?:\/\//i.test(destination_url)) {
-      return NextResponse.json({ ok: false, error: "destination_url must start with http(s)://" }, { status: 400 });
+    if (!brief_id) return NextResponse.json({ ok: false, error: "brief_id required" }, { status: 400 });
+    if (!dest_url || !/^https?:\/\//i.test(dest_url)) {
+      return NextResponse.json({ ok: false, error: "dest_url must start with http(s)://" }, { status: 400 });
     }
 
-    // determine slug
-    let desired = (slug ? slugify(slug) : "") || (title ? slugify(title) : "") || randomSlug();
-    // ensure unique (retry with tiny suffix)
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    if (!url || !serviceKey) return NextResponse.json({ ok: false, error: "Missing Supabase env" }, { status: 500 });
+
+    const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
+
+    // ensure short_id unique
+    let short_id = nanoid(8);
     for (let i = 0; i < 5; i++) {
-      const { data, error } = await supabaseAdmin.from("links").select("id").eq("slug", desired).maybeSingle();
-      if (error) throw error;
-      if (!data) break;
-      desired = `${desired}-${randomSlug(2)}`.slice(0, 32);
+      const { data: exists } = await supabase.from("links").select("id").eq("short_id", short_id).maybeSingle();
+      if (!exists) break;
+      short_id = nanoid(8);
     }
 
-    const { data: inserted, error: insErr } = await supabaseAdmin
+    // Set slug=short_id to satisfy older NOT NULL slug schemas
+    const insert = { brief_id, dest_url, short_id, slug: short_id };
+
+    const { data, error } = await supabase
       .from("links")
-      .insert([{ slug: desired, destination_url, title: title ?? null, tags: tags ?? null }])
-      .select("id, slug")
+      .insert(insert)
+      .select("id, brief_id, dest_url, short_id, slug, clicks, last_click_at, created_at")
       .single();
 
-    if (insErr) return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
+    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
 
-    const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
-    const proto = (req.headers.get("x-forwarded-proto") || "https").split(",")[0];
-    const short_url = host ? `${proto}://${host}/l/${inserted.slug}` : `/l/${inserted.slug}`;
-
-    return NextResponse.json({ ok: true, id: inserted.id, slug: inserted.slug, short_url });
+    return NextResponse.json({ ok: true, item: data });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message ?? "Unknown error" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e?.message || "Unknown error" }, { status: 500 });
   }
 }
