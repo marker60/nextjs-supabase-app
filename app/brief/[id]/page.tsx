@@ -1,21 +1,15 @@
-// [LABEL: FILE] app/brief/[id]/page.tsx
-// [LABEL: PURPOSE] Dynamic Brief editor page (UI) – works with your current API shape.
 "use client";
 import * as React from "react";
-
 type Brief = { id: string; title: string; created_at?: string };
 
 async function fetchBrief(id: string): Promise<{ ok: boolean; data?: Brief; error?: string }> {
   try {
     const res = await fetch(`/api/brief/${id}`, { cache: "no-store" });
     const json = await res.json();
-
-    // Support multiple possible shapes from your API:
-    // { ok:true, item:{...} }  OR  { ok:true, data:{...} }  OR  just the row
     if (json?.ok === false) return { ok: false, error: json.error || "Failed to load brief" };
-    const candidate: Brief = json?.item ?? json?.data ?? json;
-    if (!candidate?.id) return { ok: false, error: "Brief not found" };
-    return { ok: true, data: candidate };
+    const data: Brief = json?.item ?? json?.data ?? json;
+    if (!data?.id) return { ok: false, error: "Brief not found" };
+    return { ok: true, data };
   } catch (e: any) {
     return { ok: false, error: e?.message || "Network error" };
   }
@@ -31,7 +25,7 @@ async function saveBrief(id: string, title: string) {
 }
 
 export default function BriefDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+  const id = params.id;
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [brief, setBrief] = React.useState<Brief | null>(null);
@@ -60,13 +54,13 @@ export default function BriefDetailPage({ params }: { params: { id: string } }) 
     setSaving(true);
     setError(null);
     setSavedMsg(null);
-    const resp = await saveBrief(id, title.trim());
-    if (resp?.ok) {
+    const r = await saveBrief(id, title.trim());
+    if (r?.ok) {
       setSavedMsg("Saved!");
       setBrief(b => (b ? { ...b, title: title.trim() } : b));
       setTimeout(() => setSavedMsg(null), 1200);
     } else {
-      setError(resp?.error || "Save failed");
+      setError(r?.error || "Save failed");
     }
     setSaving(false);
   };
@@ -78,7 +72,7 @@ export default function BriefDetailPage({ params }: { params: { id: string } }) 
         <p className="text-xs text-gray-500">ID: <span className="font-mono">{id}</span></p>
       </div>
 
-      {loading && <div className="text-gray-500">Loading…</div>}
+      {loading && <div>Loading…</div>}
       {error && <div className="text-red-600">Error: {error}</div>}
 
       {!loading && !error && brief && (
@@ -97,7 +91,11 @@ export default function BriefDetailPage({ params }: { params: { id: string } }) 
           </div>
 
           <div className="flex items-center gap-3">
-            <button type="submit" disabled={saving} className="rounded-lg px-4 py-2 border shadow-sm disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg px-4 py-2 border shadow-sm disabled:opacity-60"
+            >
               {saving ? "Saving…" : "Save"}
             </button>
             {savedMsg && <span className="text-green-600">{savedMsg}</span>}
