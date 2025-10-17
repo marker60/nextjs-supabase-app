@@ -19,14 +19,22 @@ function hostFromLocation() {
   return location.origin;
 }
 
-export default function LinksPanel({ briefId }: { briefId: string }) {
+function getUrlParam(name: string): string {
+  if (typeof window === "undefined") return "";
+  const sp = new URLSearchParams(window.location.search);
+  return sp.get(name) || "";
+}
+
+export default function LinksPanel({ briefId, initialUrl = "" }: { briefId: string; initialUrl?: string }) {
   const [rows, setRows] = React.useState<LinkRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [url, setUrl] = React.useState("");
-  const [creating, setCreating] = React.useState(false);
+  // seed URL from prop or ?url=
+  const seededUrl = React.useMemo(() => initialUrl || getUrlParam("url") || "", [initialUrl]);
+  const [url, setUrl] = React.useState(seededUrl);
 
+  const [creating, setCreating] = React.useState(false);
   const base = hostFromLocation();
 
   async function load() {
@@ -44,9 +52,7 @@ export default function LinksPanel({ briefId }: { briefId: string }) {
     }
   }
 
-  React.useEffect(() => {
-    load();
-  }, [briefId]);
+  React.useEffect(() => { load(); }, [briefId]);
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -110,9 +116,7 @@ export default function LinksPanel({ briefId }: { briefId: string }) {
                     <div className="text-[11px] text-gray-400 font-mono break-all">{shortUrl}</div>
                   </div>
                   <div className="flex gap-2">
-                    <a href={shortUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100">
-                      Open
-                    </a>
+                    <a href={shortUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100">Open</a>
                     <CopyButton text={shortUrl} />
                   </div>
                 </li>
