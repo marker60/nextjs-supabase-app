@@ -1,3 +1,4 @@
+// app/l/[short]/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -11,18 +12,19 @@ export async function GET(req: Request, { params }: { params:{ short:string } })
 
   const supabase = createClient(url, serviceKey, { auth:{ persistSession:false } });
 
-  // allow short_id OR legacy slug
   const { data, error } = await supabase
     .from("links")
-    .select("id, dest_url, clicks")
+    .select("id, destination_url, clicks")
     .or(`short_id.eq.${short},slug.eq.${short}`)
     .maybeSingle();
 
   if (error || !data) return new NextResponse("Not found", { status:404 });
 
-  await supabase.from("links")
+  await supabase
+    .from("links")
     .update({ clicks:(data.clicks??0)+1, last_click_at:new Date().toISOString() })
     .eq("id", data.id);
 
-  return NextResponse.redirect(data.dest_url, { status:302 });
+  // redirect to destination_url
+  return NextResponse.redirect(data.destination_url, { status:302 });
 }
