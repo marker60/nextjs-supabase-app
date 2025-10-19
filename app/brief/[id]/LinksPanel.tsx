@@ -20,6 +20,7 @@ const originSafe = () => (typeof location === "undefined" ? "" : location.origin
 const getQuery = (k: string) =>
   typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get(k) || "";
 const isHttpUrl = (u: string) => /^https?:\/\//i.test(u);
+const isValidSlug = (s: string) => /^[a-zA-Z0-9_-]{3,32}$/.test(s);
 
 export default function LinksPanel({
   briefId,
@@ -33,8 +34,6 @@ export default function LinksPanel({
   const [error, setError] = React.useState<string | null>(null);
   const [msg, setMsg] = React.useState<string | null>(null);
 
-  const [sortBy, setSortBy] = React.useState<SortMode>("newest");
-
   // create
   const seeded = React.useMemo(() => initialUrl || getQuery("url") || "", [initialUrl]);
   const [url, setUrl] = React.useState(seeded);
@@ -43,9 +42,13 @@ export default function LinksPanel({
   // edit state
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editValue, setEditValue] = React.useState<string>("");
+  const [editSlug, setEditSlug] = React.useState<string>("");
 
   // delete modal
   const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
+
+  // sorting
+  const [sortBy, setSortBy] = React.useState<SortMode>("newest");
 
   const base = originSafe();
 
@@ -69,7 +72,7 @@ export default function LinksPanel({
         break;
       case "short":
         copy.sort((a, b) =>
-          (a.short_id || a.slug || "").localeCompare(b.short_id || b.slug || "")
+          (a.slug || a.short_id || "").localeCompare(b.slug || b.short_id || "")
         );
         break;
       case "newest":
@@ -83,7 +86,6 @@ export default function LinksPanel({
     return copy;
   }
 
-  // Core loader
   const load = React.useCallback(async () => {
     setError(null);
     try {
@@ -94,7 +96,6 @@ export default function LinksPanel({
       if (!r.ok || j?.ok === false) throw new Error(j?.error || "Load failed");
       const normalized = normalize(j.items);
       setRows(sortList(normalized, sortBy));
-      // Tell the toolbar we updated
       window.dispatchEvent(new CustomEvent("links:updated", { detail: { at: Date.now() } }));
     } catch (e: any) {
       setError(e?.message || "Load failed");
@@ -103,7 +104,6 @@ export default function LinksPanel({
     }
   }, [briefId, sortBy]);
 
-  // Initial + auto-refresh
   React.useEffect(() => {
     setLoading(true);
     load();
@@ -112,21 +112,6 @@ export default function LinksPanel({
   React.useEffect(() => {
     const id = setInterval(load, 10000);
     return () => clearInterval(id);
-  }, [load]);
-
-  // Listen for toolbar events
-  React.useEffect(() => {
-    const onRefresh = () => load();
-    const onSort = (e: Event) => {
-      const m = (e as CustomEvent).detail?.mode as SortMode | undefined;
-      if (m) setSortBy(m);
-    };
-    window.addEventListener("links:refresh", onRefresh as EventListener);
-    window.addEventListener("links:sort", onSort as EventListener);
-    return () => {
-      window.removeEventListener("links:refresh", onRefresh as EventListener);
-      window.removeEventListener("links:sort", onSort as EventListener);
-    };
   }, [load]);
 
   // CREATE
@@ -160,30 +145,49 @@ export default function LinksPanel({
   function startEdit(row: LinkRow) {
     setEditingId(row.id);
     setEditValue(row.dest_url || "");
+    setEditSlug(row.slug || "");
   }
   function cancelEdit() {
     setEditingId(null);
     setEditValue("");
+    setEditSlug("");
   }
   async function saveEdit(id: string) {
-    const next = editValue.trim();
-    if (!isHttpUrl(next)) {
+    const nextUrl = editValue.trim();
+    const nextSlug = editSlug.trim();
+    if (nextUrl && !isHttpUrl(nextUrl)) {
       setError("URL must start with http(s)://");
       return;
     }
+    if (nextSlug && !isValidSlug(nextSlug)) {
+      setError("Short code must be 3–32 chars: letters, numbers, dash, underscore");
+      return;
+    }
+
     const prev = rows;
-    setRows(rows.map((r) => (r.id === id ? { ...r, dest_url: next } : r)));
+    // optimistic UI
+    setRows(
+      rows.map((r) =>
+        r.id === id ? { ...r, dest_url: nextUrl || r.dest_url, slug: nextSlug || null } : r
+      )
+    );
     setEditingId(null);
-    setEditValue("");
+
     try {
+      const payload: any = {};
+      if (nextUrl) payload.dest_url = nextUrl;
+      // Allow clearing slug by sending empty string
+      payload.slug = nextSlug;
+
       const r = await fetch(`/api/links/${encodeURIComponent(id)}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ dest_url: next }),
+        body: JSON.stringify(payload),
       });
       const j = await r.json();
       if (!r.ok || j?.ok === false) throw new Error(j?.error || "Update failed");
       setMessage("Link updated");
+      await load();
     } catch (e: any) {
       setRows(prev); // rollback
       setError(e?.message || "Update failed");
@@ -216,6 +220,40 @@ export default function LinksPanel({
 
   return (
     <div className="space-y-4">
+      {/* Toolbar-like header (kept simple if you didn't add Toolbar.tsx) */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <h2 className="text-xl font-semibold">Links</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-sm text-gray-600 flex items-center gap-2">
+            Sort
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortMode)}
+              className="rounded-lg border px-2 py-1 text-sm"
+              aria-label="Sort links"
+            >
+              <option value="newest">Newest</option>
+              <option value="clicks">Most Clicked</option>
+              <option value="short">Shortcode A–Z</option>
+            </select>
+          </label>
+          <button
+            onClick={load}
+            className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100"
+            title="Refresh now"
+          >
+            Refresh
+          </button>
+          <a
+            href={`/api/links/export?brief_id=${encodeURIComponent(briefId)}`}
+            className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100"
+          >
+            Export CSV
+          </a>
+          {msg && <span className="text-green-600 text-sm">{msg}</span>}
+        </div>
+      </div>
+
       {/* Create */}
       <form onSubmit={onCreate} className="flex flex-col sm:flex-row gap-2">
         <input
@@ -245,7 +283,7 @@ export default function LinksPanel({
         ) : (
           <ul className="divide-y rounded-lg border">
             {rows.map((r) => {
-              const code = r.short_id || r.slug || "";
+              const code = r.slug || r.short_id || "";
               const shortUrl = base ? `${base}/l/${code}` : `/l/${code}`;
               const isEditing = editingId === r.id;
 
@@ -275,17 +313,35 @@ export default function LinksPanel({
                         </div>
                       </>
                     ) : (
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Edit URL</label>
-                        <input
-                          className="w-full rounded-lg border px-3 py-2 outline-none"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          placeholder="https://example.com"
-                          required
-                          pattern="https?://.*"
-                          title="Must start with http:// or https://"
-                        />
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-sm font-medium">Edit URL</label>
+                          <input
+                            className="mt-1 w-full rounded-lg border px-3 py-2 outline-none"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            placeholder="https://example.com"
+                            required
+                            pattern="https?://.*"
+                            title="Must start with http:// or https://"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium">
+                            Short code (optional)
+                          </label>
+                          <input
+                            className="mt-1 w-full rounded-lg border px-3 py-2 outline-none"
+                            value={editSlug}
+                            onChange={(e) => setEditSlug(e.target.value)}
+                            placeholder="my-alias"
+                            pattern="[A-Za-z0-9_-]{3,32}"
+                            title="3–32 chars: letters, numbers, dash, underscore"
+                          />
+                          <p className="mt-1 text-xs text-gray-500">
+                            Leave blank to use the auto-generated code.
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
