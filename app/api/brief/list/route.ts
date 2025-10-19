@@ -1,28 +1,27 @@
-// app/api/brief/list/route.ts
+// [LABEL: FILE] app/api/brief/list/route.ts
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { supabaseAdmin } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/**
+ * Public/preview-friendly list of briefs.
+ * Uses service role; returns minimal fields; newest-first by created_at.
+ */
 export async function GET() {
   try {
-    const supabase = getSupabaseAdmin();
-
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from("briefs")
-      .select("id, created_at, title, source_url, url")
+      .select("id, title, created_at")
       .order("created_at", { ascending: false })
-      .limit(200);
+      .limit(50);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
-    return NextResponse.json({ data: data ?? [] });
+    if (error) throw error;
+    return NextResponse.json({ ok: true, items: data ?? [] });
   } catch (e: any) {
     return NextResponse.json(
-      { error: e?.message ?? "Unknown error" },
+      { ok: false, error: e?.message ?? "Unknown error" },
       { status: 500 }
     );
   }

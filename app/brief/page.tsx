@@ -1,94 +1,237 @@
-import Link from "next/link";
+// [LABEL: FILE] app/brief/page.tsx
+// [LABEL: PURPOSE] Briefs index + search/sort/pagination + sparkline + "New Brief" button.
 
-type BriefRow = {
-  id: string;
-  created_at: string | null;
-  title: string;
-  source_url: string | null;
-  // url is optional; API may not return it yet
-  url?: string | null;
-};
+"use client";
+import * as React from "react";
+import Sparkline from "../components/Sparkline";
 
-export const dynamic = "force-dynamic";
+type Brief = { id: string; title: string; created_at?: string };
 
-async function getBriefs(): Promise<{ rows: BriefRow[]; error?: string }> {
-  try {
-    const base = process.env.NEXT_PUBLIC_BASE_URL ?? "";
-    const res = await fetch(`${base}/api/brief/list`, { cache: "no-store" });
+type ListResp =
+  | { ok?: boolean; items?: unknown }
+  | { items?: unknown }
+  | unknown;
 
-    // If API failed, try to read the error body and surface it, but don’t crash
-    if (!res.ok) {
-      let msg = `HTTP ${res.status}`;
-      try {
-        const j = await res.json();
-        if (j?.error) msg = j.error;
-      } catch {}
-      return { rows: [], error: msg };
-    }
+const PAGE_SIZE = 10;
 
-    const json = await res.json();
-    return { rows: (json?.data as BriefRow[]) ?? [] };
-  } catch (e: any) {
-    return { rows: [], error: e?.message ?? "Failed to load" };
-  }
+function isBriefLike(u: unknown): u is { id: string; title?: unknown; created_at?: unknown } {
+  return !!u && typeof (u as any).id === "string";
 }
 
-export default async function BriefsPage() {
-  const { rows, error } = await getBriefs();
+async function fetchBriefs(): Promise<Brief[]> {
+  const res = await fetch("/api/brief/list", { cache: "no-store" });
+  const json: ListResp = await res.json();
+
+  const raw: unknown[] = Array.isArray(json)
+    ? (json as unknown[])
+    : Array.isArray((json as any)?.items)
+      ? ((json as any).items as unknown[])
+      : [];
+
+  const rows: Brief[] = raw
+    .filter(isBriefLike)
+    .map((u) => ({
+      id: u.id,
+      title: typeof u.title === "string" ? u.title : "",
+      created_at: typeof u.created_at === "string" ? u.created_at : undefined,
+    }))
+    .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime());
+
+  return rows;
+}
+
+async function createBrief(title?: string): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const res = await fetch("/api/brief/create", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ title: (title ?? "").trim() }),
+  });
+  const j = await res.json();
+  if (!res.ok || j?.ok === false) return { ok: false, error: j?.error || "Create failed" };
+  return { ok: true, id: j.id };
+}
+
+function useDebounced<T>(value: T, ms = 250) {
+  const [v, setV] = React.useState<T>(value);
+  React.useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
+}
+
+export default function BriefListPage() {
+  const [all, setAll] = React.useState<Brief[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const [q, setQ] = React.useState("");
+  const [sortAsc, setSortAsc] = React.useState(false);
+  const [page, setPage] = React.useState(1);
+  const [creating, setCreating] = React.useState(false);
+
+  const qd = useDebounced(q, 250);
+
+  React.useEffect(() => {
+    let off = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const rows = await fetchBriefs();
+        if (off) return;
+        setAll(rows);
+      } catch (e: any) {
+        if (off) return;
+        setError(e?.message ?? "Failed to load briefs");
+      } finally {
+        if (!off) setLoading(false);
+      }
+    })();
+    return () => {
+      off = true;
+    };
+  }, []);
+
+  const filtered = React.useMemo(() => {
+    const needle = qd.trim().toLowerCase();
+    let rows = !needle
+      ? all
+      : all.filter((b) => (b.title ?? "").toLowerCase().includes(needle) || b.id.toLowerCase().includes(needle));
+
+    rows = rows.slice().sort((a, b) => {
+      const da = new Date(a.created_at ?? 0).getTime();
+      const db = new Date(b.created_at ?? 0).getTime();
+      return sortAsc ? da - db : db - da;
+    });
+
+    return rows;
+  }, [all, qd, sortAsc]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount);
+  const start = (current - 1) * PAGE_SIZE;
+  const pageRows = filtered.slice(start, start + PAGE_SIZE);
+
+  React.useEffect(() => setPage(1), [qd, sortAsc]);
+
+  const sparkData = React.useMemo(() => {
+    if (!all.length) return [] as number[];
+    const now = new Date();
+    const weeks = 12;
+    const buckets = new Array<number>(weeks).fill(0);
+    for (const b of all) {
+      const d = b.created_at ? new Date(b.created_at) : null;
+      if (!d || isNaN(d.getTime())) continue;
+      const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+      const bucket = Math.floor(diffDays / 7);
+      if (bucket >= 0 && bucket < weeks) buckets[weeks - 1 - bucket] += 1;
+    }
+    return buckets;
+  }, [all]);
+
+  const onNew = async () => {
+    try {
+      setCreating(true);
+      const r = await createBrief("New Brief");
+      if (!r.ok || !r.id) throw new Error(r.error || "Create failed");
+      window.location.assign(`/brief/${r.id}`);
+    } catch (e: any) {
+      setError(e?.message || "Create failed");
+      setCreating(false);
+    }
+  };
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Briefs</h1>
-        <Link className="px-3 py-2 rounded bg-green-600 hover:bg-green-500" href="/brief/new">
-          New Brief
-        </Link>
-      </div>
-
-      {error && (
-        <div className="text-red-400">
-          Error: {error}
+    <div className="max-w-3xl mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Briefs</h1>
+          <p className="text-sm text-gray-500">{all.length} total</p>
         </div>
-      )}
-
-      <div className="space-y-3">
-        {rows.map((r) => {
-          const source = r.source_url || r.url || undefined;
-          return (
-            <div key={r.id} className="rounded border border-zinc-800 p-4 flex flex-col gap-2">
-              <div className="text-xs text-zinc-400">
-                {new Date(r.created_at ?? Date.now()).toLocaleString()} · {r.id.slice(0, 8)}…
-              </div>
-
-              <Link href={`/brief/${r.id}`} className="text-lg font-semibold hover:underline">
-                {r.title}
-              </Link>
-
-              <div className="flex items-center gap-3">
-                {source ? (
-                  <a
-                    href={source}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:underline"
-                  >
-                    Open original
-                  </a>
-                ) : (
-                  <span className="text-zinc-500">No source URL</span>
-                )}
-                {/* Delete action can be wired later */}
-              </div>
-            </div>
-          );
-        })}
-
-        {rows.length === 0 && !error && (
-          <div className="text-zinc-400">
-            No briefs yet. Create one from <Link className="underline" href="/brief/new">/brief/new</Link>.
+        <div className="hidden md:flex items-center gap-3 text-gray-600">
+          <span className="text-xs">Last 12 weeks</span>
+          <div className="w-[140px] text-gray-400">
+            <Sparkline data={sparkData} width={140} height={28} strokeWidth={2} ariaLabel="briefs cadence" />
           </div>
-        )}
+        </div>
       </div>
+
+      <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+        <input
+          className="flex-1 rounded-lg border px-3 py-2 outline-none"
+          placeholder="Search by title or ID…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <button
+          onClick={() => setSortAsc((s) => !s)}
+          className="rounded-lg border px-3 py-2 text-sm"
+          title="Toggle sort (Newest/Oldest)"
+        >
+          Sort: {sortAsc ? "Oldest" : "Newest"}
+        </button>
+        <button
+          onClick={onNew}
+          disabled={creating}
+          className="rounded-lg border px-3 py-2 text-sm disabled:opacity-60"
+          title="Create a new brief"
+        >
+          {creating ? "Creating…" : "New Brief"}
+        </button>
+      </div>
+
+      {loading && <div className="text-gray-500">Loading…</div>}
+      {error && <div className="text-red-600">Error: {error}</div>}
+
+      {!loading && !error && (
+        <>
+          {pageRows.length === 0 ? (
+            <div className="text-gray-500 text-sm">No briefs match your search.</div>
+          ) : (
+            <ul className="divide-y rounded-lg border">
+              {pageRows.map((b) => (
+                <li key={b.id} className="p-4 hover:bg-gray-50 flex items-center justify-between">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{b.title || "(untitled)"}</div>
+                    <div className="text-xs text-gray-500">
+                      {b.created_at ? new Date(b.created_at).toLocaleString() : "—"}
+                    </div>
+                    <div className="text-[10px] text-gray-400 font-mono break-all">{b.id}</div>
+                  </div>
+                  <a
+                    href={`/brief/${b.id}`}
+                    className="shrink-0 rounded-lg border px-3 py-1.5 text-sm ml-4 hover:bg-gray-100"
+                    title="Open"
+                  >
+                    Open
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between pt-3">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={current === 1}
+                className="rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <div className="text-xs text-gray-500">Page {current} of {pageCount}</div>
+              <button
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                disabled={current === pageCount}
+                className="rounded-lg border px-3 py-1.5 text-sm disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

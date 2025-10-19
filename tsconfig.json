@@ -16,11 +16,11 @@
     "jsx": "preserve",
     "incremental": true,
 
-    // 👉 Path alias so "@/components/..." works
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["*"]
-    }
+    "paths": { "@/*": ["*"] },
+
+    // 👇 ensures Set/Map iteration and spreads work even if TS needs to downlevel
+    "downlevelIteration": true
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
