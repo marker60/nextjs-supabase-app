@@ -1,4 +1,5 @@
-// app/api/links/export/route.ts
+mkdir -p app/api/links/export
+cat > app/api/links/export/route.ts <<'TS'
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -15,9 +16,7 @@ function toCsvRow(fields: (string | number | null | undefined)[]) {
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const brief_id = url.searchParams.get("brief_id") || "";
-  if (!brief_id) {
-    return new NextResponse("brief_id required", { status: 400 });
-  }
+  if (!brief_id) return new NextResponse("brief_id required", { status: 400 });
 
   const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -56,3 +55,4 @@ export async function GET(req: Request) {
     }
   });
 }
+TS
