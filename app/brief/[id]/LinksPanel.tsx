@@ -33,6 +33,8 @@ export default function LinksPanel({
   const [error, setError] = React.useState<string | null>(null);
   const [msg, setMsg] = React.useState<string | null>(null);
 
+  const [sortBy, setSortBy] = React.useState<SortMode>("newest");
+
   // create
   const seeded = React.useMemo(() => initialUrl || getQuery("url") || "", [initialUrl]);
   const [url, setUrl] = React.useState(seeded);
@@ -44,9 +46,6 @@ export default function LinksPanel({
 
   // delete modal
   const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
-
-  // sorting
-  const [sortBy, setSortBy] = React.useState<SortMode>("newest");
 
   const base = originSafe();
 
@@ -84,8 +83,7 @@ export default function LinksPanel({
     return copy;
   }
 
-  const [lastLoadedAt, setLastLoadedAt] = React.useState<Date | null>(null);
-
+  // Core loader
   const load = React.useCallback(async () => {
     setError(null);
     try {
@@ -95,11 +93,9 @@ export default function LinksPanel({
       const j = await r.json();
       if (!r.ok || j?.ok === false) throw new Error(j?.error || "Load failed");
       const normalized = normalize(j.items);
-      setRows((prev) => {
-        // replace wholesale to keep truth with server
-        return sortList(normalized, sortBy);
-      });
-      setLastLoadedAt(new Date());
+      setRows(sortList(normalized, sortBy));
+      // Tell the toolbar we updated
+      window.dispatchEvent(new CustomEvent("links:updated", { detail: { at: Date.now() } }));
     } catch (e: any) {
       setError(e?.message || "Load failed");
     } finally {
@@ -107,23 +103,31 @@ export default function LinksPanel({
     }
   }, [briefId, sortBy]);
 
+  // Initial + auto-refresh
   React.useEffect(() => {
     setLoading(true);
     load();
   }, [briefId, load]);
 
-  // Auto-refresh every 10s
   React.useEffect(() => {
-    const id = setInterval(() => {
-      load();
-    }, 10000);
+    const id = setInterval(load, 10000);
     return () => clearInterval(id);
   }, [load]);
 
-  // If sort mode changes, re-apply sorting client-side
+  // Listen for toolbar events
   React.useEffect(() => {
-    setRows((prev) => sortList(prev, sortBy));
-  }, [sortBy]);
+    const onRefresh = () => load();
+    const onSort = (e: Event) => {
+      const m = (e as CustomEvent).detail?.mode as SortMode | undefined;
+      if (m) setSortBy(m);
+    };
+    window.addEventListener("links:refresh", onRefresh as EventListener);
+    window.addEventListener("links:sort", onSort as EventListener);
+    return () => {
+      window.removeEventListener("links:refresh", onRefresh as EventListener);
+      window.removeEventListener("links:sort", onSort as EventListener);
+    };
+  }, [load]);
 
   // CREATE
   async function onCreate(e: React.FormEvent) {
@@ -212,43 +216,6 @@ export default function LinksPanel({
 
   return (
     <div className="space-y-4">
-      {/* Header with Export + Refresh + Sort */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold">Links</h2>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="text-xs text-gray-500">
-            {lastLoadedAt ? `Updated ${lastLoadedAt.toLocaleTimeString()}` : ""}
-          </div>
-          <button
-            onClick={load}
-            className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100"
-            title="Refresh now"
-          >
-            Refresh
-          </button>
-          <label className="text-sm text-gray-600 flex items-center gap-2">
-            Sort
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortMode)}
-              className="rounded-lg border px-2 py-1 text-sm"
-              aria-label="Sort links"
-            >
-              <option value="newest">Newest</option>
-              <option value="clicks">Most Clicked</option>
-              <option value="short">Shortcode A–Z</option>
-            </select>
-          </label>
-          <a
-            href={`/api/links/export?brief_id=${encodeURIComponent(briefId)}`}
-            className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100"
-          >
-            Export CSV
-          </a>
-          {msg && <span className="text-green-600 text-sm">{msg}</span>}
-        </div>
-      </div>
-
       {/* Create */}
       <form onSubmit={onCreate} className="flex flex-col sm:flex-row gap-2">
         <input
