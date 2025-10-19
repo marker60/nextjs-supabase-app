@@ -1,5 +1,3 @@
-mkdir -p app/api/links/export
-cat > app/api/links/export/route.ts <<'TS'
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -55,4 +53,3 @@ export async function GET(req: Request) {
     }
   });
 }
-TS
