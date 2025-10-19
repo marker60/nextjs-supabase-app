@@ -34,6 +34,11 @@ export default function LinksPanel({
   const [error, setError] = React.useState<string | null>(null);
   const [msg, setMsg] = React.useState<string | null>(null);
 
+  const [sortBy, setSortBy] = React.useState<SortMode>("newest");
+  const [cursor, setCursor] = React.useState<string | null>(null);
+  const [hasMore, setHasMore] = React.useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = React.useState<boolean>(false);
+
   // create
   const seeded = React.useMemo(() => initialUrl || getQuery("url") || "", [initialUrl]);
   const [url, setUrl] = React.useState(seeded);
@@ -46,9 +51,6 @@ export default function LinksPanel({
 
   // delete modal
   const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
-
-  // sorting
-  const [sortBy, setSortBy] = React.useState<SortMode>("newest");
 
   const base = originSafe();
 
@@ -86,16 +88,22 @@ export default function LinksPanel({
     return copy;
   }
 
+  // Base load (first page)
   const load = React.useCallback(async () => {
+    setLoading(true);
     setError(null);
     try {
-      const r = await fetch(`/api/links/list?brief_id=${encodeURIComponent(briefId)}`, {
-        cache: "no-store",
-      });
+      const r = await fetch(
+        `/api/links/list?brief_id=${encodeURIComponent(briefId)}&limit=20`,
+        { cache: "no-store" },
+      );
       const j = await r.json();
       if (!r.ok || j?.ok === false) throw new Error(j?.error || "Load failed");
-      const normalized = normalize(j.items);
-      setRows(sortList(normalized, sortBy));
+      const items = normalize(j.items);
+      setRows(sortList(items, sortBy));
+      setCursor(j.next_cursor || null);
+      setHasMore(!!j.next_cursor);
+      // Notify toolbar (if present) that we updated
       window.dispatchEvent(new CustomEvent("links:updated", { detail: { at: Date.now() } }));
     } catch (e: any) {
       setError(e?.message || "Load failed");
@@ -104,10 +112,36 @@ export default function LinksPanel({
     }
   }, [briefId, sortBy]);
 
+  // Load next page
+  async function loadMore() {
+    if (!cursor) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const r = await fetch(
+        `/api/links/list?brief_id=${encodeURIComponent(briefId)}&limit=20&cursor=${encodeURIComponent(
+          cursor,
+        )}`,
+        { cache: "no-store" },
+      );
+      const j = await r.json();
+      if (!r.ok || j?.ok === false) throw new Error(j?.error || "Load more failed");
+      const items = normalize(j.items);
+      const merged = [...rows, ...items];
+      setRows(sortList(merged, sortBy));
+      setCursor(j.next_cursor || null);
+      setHasMore(!!j.next_cursor);
+    } catch (e: any) {
+      setError(e?.message || "Load more failed");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  // Initial + auto-refresh (restarts at first page)
   React.useEffect(() => {
-    setLoading(true);
     load();
-  }, [briefId, load]);
+  }, [load]);
 
   React.useEffect(() => {
     const id = setInterval(load, 10000);
@@ -133,7 +167,7 @@ export default function LinksPanel({
       if (!r.ok || j?.ok === false) throw new Error(j?.error || "Create failed");
       setUrl("");
       setMessage("Link created");
-      await load();
+      await load(); // reload page 1
     } catch (e: any) {
       setError(e?.message || "Create failed");
     } finally {
@@ -176,8 +210,7 @@ export default function LinksPanel({
     try {
       const payload: any = {};
       if (nextUrl) payload.dest_url = nextUrl;
-      // Allow clearing slug by sending empty string
-      payload.slug = nextSlug;
+      payload.slug = nextSlug; // allow clearing with empty string
 
       const r = await fetch(`/api/links/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -218,9 +251,15 @@ export default function LinksPanel({
     setPendingDeleteId(null);
   }
 
+  // Render
+  const baseUrl = (r: LinkRow) => {
+    const code = r.slug || r.short_id || "";
+    return base ? `${base}/l/${code}` : `/l/${code}`;
+  };
+
   return (
     <div className="space-y-4">
-      {/* Toolbar-like header (kept simple if you didn't add Toolbar.tsx) */}
+      {/* Toolbar (simple version kept inline) */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold">Links</h2>
         <div className="flex flex-wrap items-center gap-2">
@@ -281,116 +320,128 @@ export default function LinksPanel({
         rows.length === 0 ? (
           <div className="text-gray-500 text-sm">No links yet.</div>
         ) : (
-          <ul className="divide-y rounded-lg border">
-            {rows.map((r) => {
-              const code = r.slug || r.short_id || "";
-              const shortUrl = base ? `${base}/l/${code}` : `/l/${code}`;
-              const isEditing = editingId === r.id;
+          <>
+            <ul className="divide-y rounded-lg border">
+              {rows.map((r) => {
+                const shortUrl = baseUrl(r);
+                const isEditing = editingId === r.id;
 
-              return (
-                <li
-                  key={r.id}
-                  className="p-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"
-                >
-                  {/* Left */}
-                  <div className="min-w-0">
+                return (
+                  <li
+                    key={r.id}
+                    className="p-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"
+                  >
+                    {/* Left */}
+                    <div className="min-w-0">
+                      {!isEditing ? (
+                        <>
+                          <div className="font-medium truncate">
+                            {r.dest_url || r.destination_url || ""}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {r.created_at
+                              ? new Date(r.created_at).toLocaleString()
+                              : "—"}{" "}
+                            · {r.clicks ?? 0} clicks{" "}
+                            {r.last_click_at
+                              ? `· last: ${new Date(r.last_click_at).toLocaleString()}`
+                              : ""}
+                          </div>
+                          <div className="text-[11px] text-gray-400 font-mono break-all">
+                            {shortUrl}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-sm font-medium">Edit URL</label>
+                            <input
+                              className="mt-1 w-full rounded-lg border px-3 py-2 outline-none"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              placeholder="https://example.com"
+                              required
+                              pattern="https?://.*"
+                              title="Must start with http:// or https://"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium">Short code (optional)</label>
+                            <input
+                              className="mt-1 w-full rounded-lg border px-3 py-2 outline-none"
+                              value={editSlug}
+                              onChange={(e) => setEditSlug(e.target.value)}
+                              placeholder="my-alias"
+                              pattern="[A-Za-z0-9_-]{3,32}"
+                              title="3–32 chars: letters, numbers, dash, underscore"
+                            />
+                            <p className="mt-1 text-xs text-gray-500">
+                              Leave blank to use the auto-generated code.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right actions */}
                     {!isEditing ? (
-                      <>
-                        <div className="font-medium truncate">
-                          {r.dest_url || r.destination_url || ""}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {r.created_at
-                            ? new Date(r.created_at).toLocaleString()
-                            : "—"}{" "}
-                          · {r.clicks ?? 0} clicks{" "}
-                          {r.last_click_at
-                            ? `· last: ${new Date(r.last_click_at).toLocaleString()}`
-                            : ""}
-                        </div>
-                        <div className="text-[11px] text-gray-400 font-mono break-all">
-                          {shortUrl}
-                        </div>
-                      </>
+                      <div className="flex gap-2 justify-self-start sm:justify-self-end">
+                        <a
+                          href={shortUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100"
+                        >
+                          Open
+                        </a>
+                        <CopyButton text={shortUrl} />
+                        <button
+                          onClick={() => startEdit(r)}
+                          className="rounded-lg border px-3 py-1.5 text-sm"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => askDelete(r.id)}
+                          className="rounded-lg border px-3 py-1.5 text-sm text-red-600"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     ) : (
-                      <div className="space-y-3">
-                        <div>
-                          <label className="text-sm font-medium">Edit URL</label>
-                          <input
-                            className="mt-1 w-full rounded-lg border px-3 py-2 outline-none"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            placeholder="https://example.com"
-                            required
-                            pattern="https?://.*"
-                            title="Must start with http:// or https://"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium">
-                            Short code (optional)
-                          </label>
-                          <input
-                            className="mt-1 w-full rounded-lg border px-3 py-2 outline-none"
-                            value={editSlug}
-                            onChange={(e) => setEditSlug(e.target.value)}
-                            placeholder="my-alias"
-                            pattern="[A-Za-z0-9_-]{3,32}"
-                            title="3–32 chars: letters, numbers, dash, underscore"
-                          />
-                          <p className="mt-1 text-xs text-gray-500">
-                            Leave blank to use the auto-generated code.
-                          </p>
-                        </div>
+                      <div className="flex gap-2 justify-self-start sm:justify-self-end">
+                        <button
+                          onClick={() => saveEdit(r.id)}
+                          className="rounded-lg border px-3 py-1.5 text-sm"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="rounded-lg border px-3 py-1.5 text-sm"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     )}
-                  </div>
+                  </li>
+                );
+              })}
+            </ul>
 
-                  {/* Right actions */}
-                  {!isEditing ? (
-                    <div className="flex gap-2 justify-self-start sm:justify-self-end">
-                      <a
-                        href={shortUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100"
-                      >
-                        Open
-                      </a>
-                      <CopyButton text={shortUrl} />
-                      <button
-                        onClick={() => startEdit(r)}
-                        className="rounded-lg border px-3 py-1.5 text-sm"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => askDelete(r.id)}
-                        className="rounded-lg border px-3 py-1.5 text-sm text-red-600"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2 justify-self-start sm:justify-self-end">
-                      <button
-                        onClick={() => saveEdit(r.id)}
-                        className="rounded-lg border px-3 py-1.5 text-sm"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={cancelEdit}
-                        className="rounded-lg border px-3 py-1.5 text-sm"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+            {/* Load more */}
+            {hasMore && (
+              <div className="flex justify-center">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="mt-3 rounded-lg border px-4 py-2 text-sm disabled:opacity-60"
+                >
+                  {loadingMore ? "Loading…" : "Load more"}
+                </button>
+              </div>
+            )}
+          </>
         )
       )}
 
