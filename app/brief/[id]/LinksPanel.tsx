@@ -1,5 +1,3 @@
-cat > app/brief/[id]/LinksPanel.tsx <<'TSX'
-// app/brief/[id]/LinksPanel.tsx
 "use client";
 import * as React from "react";
 import CopyButton from "../../components/CopyButton";
@@ -33,13 +31,16 @@ export default function LinksPanel({
   const [error, setError] = React.useState<string | null>(null);
   const [msg, setMsg] = React.useState<string | null>(null);
 
+  // create
   const seeded = React.useMemo(() => initialUrl || getQuery("url") || "", [initialUrl]);
   const [url, setUrl] = React.useState(seeded);
   const [creating, setCreating] = React.useState(false);
 
+  // edit state
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editValue, setEditValue] = React.useState<string>("");
 
+  // delete modal
   const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
 
   const base = originSafe();
@@ -73,13 +74,19 @@ export default function LinksPanel({
     }
   }
 
-  React.useEffect(() => { load(); }, [briefId]);
+  React.useEffect(() => {
+    load();
+  }, [briefId]);
 
+  // CREATE
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
     try {
       const value = url.trim();
-      if (!isHttpUrl(value)) { setError("URL must start with http(s)://"); return; }
+      if (!isHttpUrl(value)) {
+        setError("URL must start with http(s)://");
+        return;
+      }
       setCreating(true);
       const r = await fetch(`/api/links/create`, {
         method: "POST",
@@ -98,6 +105,7 @@ export default function LinksPanel({
     }
   }
 
+  // EDIT
   function startEdit(row: LinkRow) {
     setEditingId(row.id);
     setEditValue(row.dest_url || "");
@@ -108,7 +116,10 @@ export default function LinksPanel({
   }
   async function saveEdit(id: string) {
     const next = editValue.trim();
-    if (!isHttpUrl(next)) { setError("URL must start with http(s)://"); return; }
+    if (!isHttpUrl(next)) {
+      setError("URL must start with http(s)://");
+      return;
+    }
     const prev = rows;
     setRows(rows.map((r) => (r.id === id ? { ...r, dest_url: next } : r)));
     setEditingId(null);
@@ -123,32 +134,38 @@ export default function LinksPanel({
       if (!r.ok || j?.ok === false) throw new Error(j?.error || "Update failed");
       setMessage("Link updated");
     } catch (e: any) {
-      setRows(prev);
+      setRows(prev); // rollback
       setError(e?.message || "Update failed");
     }
   }
 
-  function askDelete(id: string) { setPendingDeleteId(id); }
+  // DELETE (with modal)
+  function askDelete(id: string) {
+    setPendingDeleteId(id);
+  }
   async function confirmDelete() {
     if (!pendingDeleteId) return;
     const id = pendingDeleteId;
     setPendingDeleteId(null);
     const prev = rows;
-    setRows(rows.filter((r) => r.id !== id));
+    setRows(rows.filter((r) => r.id !== id)); // optimistic
     try {
       const r = await fetch(`/api/links/${encodeURIComponent(id)}`, { method: "DELETE" });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j?.ok === false) throw new Error(j?.error || "Delete failed");
       setMessage("Link deleted");
     } catch (e: any) {
-      setRows(prev);
+      setRows(prev); // rollback
       setError(e?.message || "Delete failed");
     }
   }
-  function cancelDelete() { setPendingDeleteId(null); }
+  function cancelDelete() {
+    setPendingDeleteId(null);
+  }
 
   return (
     <div className="space-y-4">
+      {/* Header with Export CSV */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Links</h2>
         <div className="flex items-center gap-3">
@@ -162,6 +179,7 @@ export default function LinksPanel({
         </div>
       </div>
 
+      {/* Create */}
       <form onSubmit={onCreate} className="flex flex-col sm:flex-row gap-2">
         <input
           className="flex-1 rounded-lg border px-3 py-2 outline-none"
@@ -172,7 +190,11 @@ export default function LinksPanel({
           pattern="https?://.*"
           title="Must start with http:// or https://"
         />
-        <button type="submit" disabled={creating} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-60">
+        <button
+          type="submit"
+          disabled={creating}
+          className="rounded-lg border px-3 py-2 text-sm disabled:opacity-60"
+        >
           {creating ? "Creating…" : "New Link"}
         </button>
       </form>
@@ -191,16 +213,29 @@ export default function LinksPanel({
               const isEditing = editingId === r.id;
 
               return (
-                <li key={r.id} className="p-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                <li
+                  key={r.id}
+                  className="p-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center"
+                >
+                  {/* Left */}
                   <div className="min-w-0">
                     {!isEditing ? (
                       <>
-                        <div className="font-medium truncate">{r.dest_url || r.destination_url || ""}</div>
-                        <div className="text-xs text-gray-500">
-                          {r.created_at ? new Date(r.created_at).toLocaleString() : "—"} · {r.clicks ?? 0} clicks{" "}
-                          {r.last_click_at ? `· last: ${new Date(r.last_click_at).toLocaleString()}` : ""}
+                        <div className="font-medium truncate">
+                          {r.dest_url || r.destination_url || ""}
                         </div>
-                        <div className="text-[11px] text-gray-400 font-mono break-all">{shortUrl}</div>
+                        <div className="text-xs text-gray-500">
+                          {r.created_at
+                            ? new Date(r.created_at).toLocaleString()
+                            : "—"}{" "}
+                          · {r.clicks ?? 0} clicks{" "}
+                          {r.last_click_at
+                            ? `· last: ${new Date(r.last_click_at).toLocaleString()}`
+                            : ""}
+                        </div>
+                        <div className="text-[11px] text-gray-400 font-mono break-all">
+                          {shortUrl}
+                        </div>
                       </>
                     ) : (
                       <div className="space-y-2">
@@ -218,17 +253,45 @@ export default function LinksPanel({
                     )}
                   </div>
 
+                  {/* Right actions */}
                   {!isEditing ? (
                     <div className="flex gap-2 justify-self-start sm:justify-self-end">
-                      <a href={shortUrl} target="_blank" rel="noopener noreferrer" className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100">Open</a>
+                      <a
+                        href={shortUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100"
+                      >
+                        Open
+                      </a>
                       <CopyButton text={shortUrl} />
-                      <button onClick={() => startEdit(r)} className="rounded-lg border px-3 py-1.5 text-sm">Edit</button>
-                      <button onClick={() => askDelete(r.id)} className="rounded-lg border px-3 py-1.5 text-sm text-red-600">Delete</button>
+                      <button
+                        onClick={() => startEdit(r)}
+                        className="rounded-lg border px-3 py-1.5 text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => askDelete(r.id)}
+                        className="rounded-lg border px-3 py-1.5 text-sm text-red-600"
+                      >
+                        Delete
+                      </button>
                     </div>
                   ) : (
                     <div className="flex gap-2 justify-self-start sm:justify-self-end">
-                      <button onClick={() => saveEdit(r.id)} className="rounded-lg border px-3 py-1.5 text-sm">Save</button>
-                      <button onClick={cancelEdit} className="rounded-lg border px-3 py-1.5 text-sm">Cancel</button>
+                      <button
+                        onClick={() => saveEdit(r.id)}
+                        className="rounded-lg border px-3 py-1.5 text-sm"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="rounded-lg border px-3 py-1.5 text-sm"
+                      >
+                        Cancel
+                      </button>
                     </div>
                   )}
                 </li>
@@ -238,14 +301,27 @@ export default function LinksPanel({
         )
       )}
 
+      {/* Delete Confirmation Modal */}
       {pendingDeleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="text-lg font-semibold">Delete this link?</h3>
-            <p className="mt-2 text-sm text-gray-600">This action cannot be undone. The short link will stop working immediately.</p>
+            <p className="mt-2 text-sm text-gray-600">
+              This action cannot be undone. The short link will stop working immediately.
+            </p>
             <div className="mt-6 flex justify-end gap-3">
-              <button onClick={cancelDelete} className="rounded-lg border px-3 py-1.5 text-sm">Cancel</button>
-              <button onClick={confirmDelete} className="rounded-lg border px-3 py-1.5 text-sm bg-red-600 text-white hover:bg-red-700">Delete</button>
+              <button
+                onClick={cancelDelete}
+                className="rounded-lg border px-3 py-1.5 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="rounded-lg border px-3 py-1.5 text-sm bg-red-600 text-white hover:bg-red-700"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>
@@ -253,4 +329,3 @@ export default function LinksPanel({
     </div>
   );
 }
-TSX
