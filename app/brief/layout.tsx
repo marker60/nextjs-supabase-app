@@ -13,13 +13,3 @@ export default async function BriefSectionLayout({
 
   return <>{children}</>;
 }
-
-
-
-
-
-
-
-
-
-
