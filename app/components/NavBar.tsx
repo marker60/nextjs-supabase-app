@@ -4,21 +4,22 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import ThemeToggle from "./ThemeToggle";
 
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-const btn = cn(
-  "rounded-lg border px-3 py-1.5 text-sm transition-colors",
-  "bg-transparent text-gray-900 hover:bg-gray-100 hover:text-gray-900",
-  "dark:text-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-white"
-);
-
 const linkBtn = cn(
   "rounded-lg px-3 py-1.5 text-sm transition-colors",
   "text-gray-700 hover:bg-gray-100 hover:text-gray-900",
   "dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-white"
+);
+
+const btn = cn(
+  "rounded-lg border px-3 py-1.5 text-sm transition-colors",
+  "bg-transparent text-gray-900 hover:bg-gray-100 hover:text-gray-900",
+  "dark:text-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-white"
 );
 
 export default function NavBar() {
@@ -43,8 +44,9 @@ export default function NavBar() {
           </Link>
         </div>
 
-        {/* Right: ONLY show these on auth pages */}
+        {/* Right: Theme toggle always; auth buttons ONLY on auth pages */}
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           {showAuthButtons ? (
             <>
               <Link href="/login" className={btn}>
