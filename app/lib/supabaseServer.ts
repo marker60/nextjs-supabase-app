@@ -1,10 +1,10 @@
 // app/lib/supabaseServer.ts
 import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/auth-helpers-nextjs";
+import { createServerClient } from "@supabase/ssr";
 
 /**
- * Server-side Supabase client that reads/writes auth cookies
- * so we can check the session in server components/layouts.
+ * Server-side Supabase client for App Router.
+ * Reads/writes auth cookies so we can check session in server components/layouts.
  */
 export function createSupabaseServerClient() {
   const cookieStore = cookies();
@@ -15,6 +15,7 @@ export function createSupabaseServerClient() {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
 
+  // NOTE: In some RSC contexts, setting cookies may no-op; that's OK for reads.
   return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       get(name: string) {
@@ -24,14 +25,14 @@ export function createSupabaseServerClient() {
         try {
           cookieStore.set({ name, value, ...options });
         } catch {
-          // Some render modes may not allow setting here; it's fine for reads.
+          // ignore if not allowed in this render phase
         }
       },
       remove(name: string, options: any) {
         try {
           cookieStore.set({ name, value: "", ...options, expires: new Date(0) });
         } catch {
-          // ignore
+          // ignore if not allowed in this render phase
         }
       },
     },
