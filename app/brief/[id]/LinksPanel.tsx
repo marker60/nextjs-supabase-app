@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
 import CopyButton from "../../components/CopyButton";
+import StatsDrawer from "../../components/StatsDrawer";
 
 type LinkRow = {
   id: string;
@@ -22,28 +23,24 @@ const getQuery = (k: string) =>
 const isHttpUrl = (u: string) => /^https?:\/\//i.test(u);
 const isValidSlug = (s: string) => /^[a-zA-Z0-9_-]{3,32}$/.test(s);
 
-// className helper
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-// Button styles (good contrast in light & dark)
 const btn = cn(
   "rounded-lg border px-3 py-1.5 text-sm transition-colors",
   "bg-transparent text-gray-900 hover:bg-gray-100 hover:text-gray-900",
   "dark:text-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-white"
 );
-
-const btnPrimary = cn(
-  "rounded-lg border px-3 py-2 text-sm transition-colors",
-  "bg-white text-gray-900 hover:bg-gray-100",
-  "dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-700"
-);
-
 const btnDanger = cn(
   "rounded-lg border px-3 py-1.5 text-sm transition-colors",
   "text-red-700 border-red-300 hover:bg-red-50 hover:text-red-800",
   "dark:text-red-400 dark:border-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-300"
+);
+const btnPrimary = cn(
+  "rounded-lg border px-3 py-2 text-sm transition-colors",
+  "bg-white text-gray-900 hover:bg-gray-100",
+  "dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-700"
 );
 
 export default function LinksPanel({
@@ -75,6 +72,9 @@ export default function LinksPanel({
 
   // delete modal
   const [pendingDeleteId, setPendingDeleteId] = React.useState<string | null>(null);
+
+  // stats drawer
+  const [statsFor, setStatsFor] = React.useState<string | null>(null);
 
   const base = originSafe();
 
@@ -112,7 +112,6 @@ export default function LinksPanel({
     return copy;
   }
 
-  // Base load (first page)
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -135,7 +134,6 @@ export default function LinksPanel({
     }
   }, [briefId, sortBy]);
 
-  // Load next page
   async function loadMore() {
     if (!cursor) return;
     setLoadingMore(true);
@@ -248,7 +246,7 @@ export default function LinksPanel({
     }
   }
 
-  // DELETE (with modal)
+  // DELETE
   function askDelete(id: string) {
     setPendingDeleteId(id);
   }
@@ -279,7 +277,7 @@ export default function LinksPanel({
 
   return (
     <div className="space-y-4">
-      {/* Controls row (kept here) */}
+      {/* Controls */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold">Links</h2>
         <div className="flex flex-wrap items-center gap-2">
@@ -426,6 +424,9 @@ export default function LinksPanel({
                         <button onClick={() => startEdit(r)} className={btn}>
                           Edit
                         </button>
+                        <button onClick={() => setStatsFor(r.id)} className={btn}>
+                          Stats
+                        </button>
                         <button onClick={() => askDelete(r.id)} className={btnDanger}>
                           Delete
                         </button>
@@ -445,7 +446,6 @@ export default function LinksPanel({
               })}
             </ul>
 
-            {/* Load more */}
             {hasMore && (
               <div className="flex justify-center">
                 <button onClick={loadMore} disabled={loadingMore} className={btn}>
@@ -476,6 +476,9 @@ export default function LinksPanel({
           </div>
         </div>
       )}
+
+      {/* Stats Drawer */}
+      <StatsDrawer linkId={statsFor || ""} open={!!statsFor} onClose={() => setStatsFor(null)} />
     </div>
   );
 }
