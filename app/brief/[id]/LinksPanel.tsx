@@ -22,6 +22,30 @@ const getQuery = (k: string) =>
 const isHttpUrl = (u: string) => /^https?:\/\//i.test(u);
 const isValidSlug = (s: string) => /^[a-zA-Z0-9_-]{3,32}$/.test(s);
 
+// className helper
+function cn(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
+
+// Button styles (good contrast in light & dark)
+const btn = cn(
+  "rounded-lg border px-3 py-1.5 text-sm transition-colors",
+  "bg-transparent text-gray-900 hover:bg-gray-100 hover:text-gray-900",
+  "dark:text-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-white"
+);
+
+const btnPrimary = cn(
+  "rounded-lg border px-3 py-2 text-sm transition-colors",
+  "bg-white text-gray-900 hover:bg-gray-100",
+  "dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-700"
+);
+
+const btnDanger = cn(
+  "rounded-lg border px-3 py-1.5 text-sm transition-colors",
+  "text-red-700 border-red-300 hover:bg-red-50 hover:text-red-800",
+  "dark:text-red-400 dark:border-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-300"
+);
+
 export default function LinksPanel({
   briefId,
   initialUrl = "",
@@ -103,7 +127,6 @@ export default function LinksPanel({
       setRows(sortList(items, sortBy));
       setCursor(j.next_cursor || null);
       setHasMore(!!j.next_cursor);
-      // Notify toolbar (if present) that we updated
       window.dispatchEvent(new CustomEvent("links:updated", { detail: { at: Date.now() } }));
     } catch (e: any) {
       setError(e?.message || "Load failed");
@@ -138,7 +161,6 @@ export default function LinksPanel({
     }
   }
 
-  // Initial + auto-refresh (restarts at first page)
   React.useEffect(() => {
     load();
   }, [load]);
@@ -167,7 +189,7 @@ export default function LinksPanel({
       if (!r.ok || j?.ok === false) throw new Error(j?.error || "Create failed");
       setUrl("");
       setMessage("Link created");
-      await load(); // reload page 1
+      await load();
     } catch (e: any) {
       setError(e?.message || "Create failed");
     } finally {
@@ -199,7 +221,6 @@ export default function LinksPanel({
     }
 
     const prev = rows;
-    // optimistic UI
     setRows(
       rows.map((r) =>
         r.id === id ? { ...r, dest_url: nextUrl || r.dest_url, slug: nextSlug || null } : r
@@ -210,7 +231,7 @@ export default function LinksPanel({
     try {
       const payload: any = {};
       if (nextUrl) payload.dest_url = nextUrl;
-      payload.slug = nextSlug; // allow clearing with empty string
+      payload.slug = nextSlug;
 
       const r = await fetch(`/api/links/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -222,7 +243,7 @@ export default function LinksPanel({
       setMessage("Link updated");
       await load();
     } catch (e: any) {
-      setRows(prev); // rollback
+      setRows(prev);
       setError(e?.message || "Update failed");
     }
   }
@@ -236,14 +257,14 @@ export default function LinksPanel({
     const id = pendingDeleteId;
     setPendingDeleteId(null);
     const prev = rows;
-    setRows(rows.filter((r) => r.id !== id)); // optimistic
+    setRows(rows.filter((r) => r.id !== id));
     try {
       const r = await fetch(`/api/links/${encodeURIComponent(id)}`, { method: "DELETE" });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || j?.ok === false) throw new Error(j?.error || "Delete failed");
       setMessage("Link deleted");
     } catch (e: any) {
-      setRows(prev); // rollback
+      setRows(prev);
       setError(e?.message || "Delete failed");
     }
   }
@@ -251,7 +272,6 @@ export default function LinksPanel({
     setPendingDeleteId(null);
   }
 
-  // Render
   const baseUrl = (r: LinkRow) => {
     const code = r.slug || r.short_id || "";
     return base ? `${base}/l/${code}` : `/l/${code}`;
@@ -259,16 +279,20 @@ export default function LinksPanel({
 
   return (
     <div className="space-y-4">
-      {/* Toolbar (simple version kept inline) */}
+      {/* Controls row (kept here) */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold">Links</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-sm text-gray-600 flex items-center gap-2">
+          <label className="text-sm text-gray-600 dark:text-zinc-400 flex items-center gap-2">
             Sort
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortMode)}
-              className="rounded-lg border px-2 py-1 text-sm"
+              className={cn(
+                "rounded-lg border px-2 py-1 text-sm",
+                "bg-white text-gray-900",
+                "dark:bg-zinc-800 dark:text-zinc-100 dark:border-zinc-600"
+              )}
               aria-label="Sort links"
             >
               <option value="newest">Newest</option>
@@ -276,16 +300,12 @@ export default function LinksPanel({
               <option value="short">Shortcode A–Z</option>
             </select>
           </label>
-          <button
-            onClick={load}
-            className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100"
-            title="Refresh now"
-          >
+          <button onClick={load} className={btn} title="Refresh now">
             Refresh
           </button>
           <a
             href={`/api/links/export?brief_id=${encodeURIComponent(briefId)}`}
-            className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100"
+            className={btn}
           >
             Export CSV
           </a>
@@ -296,7 +316,11 @@ export default function LinksPanel({
       {/* Create */}
       <form onSubmit={onCreate} className="flex flex-col sm:flex-row gap-2">
         <input
-          className="flex-1 rounded-lg border px-3 py-2 outline-none"
+          className={cn(
+            "flex-1 rounded-lg border px-3 py-2 outline-none",
+            "bg-white text-gray-900 placeholder-gray-500",
+            "dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-700 dark:placeholder-zinc-500"
+          )}
           placeholder="Paste destination URL (https://…)"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
@@ -304,24 +328,20 @@ export default function LinksPanel({
           pattern="https?://.*"
           title="Must start with http:// or https://"
         />
-        <button
-          type="submit"
-          disabled={creating}
-          className="rounded-lg border px-3 py-2 text-sm disabled:opacity-60"
-        >
+        <button type="submit" disabled={creating} className={btnPrimary}>
           {creating ? "Creating…" : "New Link"}
         </button>
       </form>
 
-      {loading && <div className="text-gray-500">Loading links…</div>}
-      {error && <div className="text-red-600">Error: {error}</div>}
+      {loading && <div className="text-gray-500 dark:text-zinc-400">Loading links…</div>}
+      {error && <div className="text-red-600">{error}</div>}
 
       {!loading && !error && (
         rows.length === 0 ? (
-          <div className="text-gray-500 text-sm">No links yet.</div>
+          <div className="text-gray-500 text-sm dark:text-zinc-400">No links yet.</div>
         ) : (
           <>
-            <ul className="divide-y rounded-lg border">
+            <ul className="divide-y rounded-lg border dark:border-zinc-700">
               {rows.map((r) => {
                 const shortUrl = baseUrl(r);
                 const isEditing = editingId === r.id;
@@ -338,7 +358,7 @@ export default function LinksPanel({
                           <div className="font-medium truncate">
                             {r.dest_url || r.destination_url || ""}
                           </div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-500 dark:text-zinc-400">
                             {r.created_at
                               ? new Date(r.created_at).toLocaleString()
                               : "—"}{" "}
@@ -347,7 +367,7 @@ export default function LinksPanel({
                               ? `· last: ${new Date(r.last_click_at).toLocaleString()}`
                               : ""}
                           </div>
-                          <div className="text-[11px] text-gray-400 font-mono break-all">
+                          <div className="text-[11px] text-gray-500 dark:text-zinc-400 font-mono break-all">
                             {shortUrl}
                           </div>
                         </>
@@ -356,7 +376,11 @@ export default function LinksPanel({
                           <div>
                             <label className="text-sm font-medium">Edit URL</label>
                             <input
-                              className="mt-1 w-full rounded-lg border px-3 py-2 outline-none"
+                              className={cn(
+                                "mt-1 w-full rounded-lg border px-3 py-2 outline-none",
+                                "bg-white text-gray-900",
+                                "dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-700"
+                              )}
                               value={editValue}
                               onChange={(e) => setEditValue(e.target.value)}
                               placeholder="https://example.com"
@@ -368,14 +392,18 @@ export default function LinksPanel({
                           <div>
                             <label className="text-sm font-medium">Short code (optional)</label>
                             <input
-                              className="mt-1 w-full rounded-lg border px-3 py-2 outline-none"
+                              className={cn(
+                                "mt-1 w-full rounded-lg border px-3 py-2 outline-none",
+                                "bg-white text-gray-900",
+                                "dark:bg-zinc-900 dark:text-zinc-100 dark:border-zinc-700"
+                              )}
                               value={editSlug}
                               onChange={(e) => setEditSlug(e.target.value)}
                               placeholder="my-alias"
                               pattern="[A-Za-z0-9_-]{3,32}"
                               title="3–32 chars: letters, numbers, dash, underscore"
                             />
-                            <p className="mt-1 text-xs text-gray-500">
+                            <p className="mt-1 text-xs text-gray-500 dark:text-zinc-400">
                               Leave blank to use the auto-generated code.
                             </p>
                           </div>
@@ -390,36 +418,24 @@ export default function LinksPanel({
                           href={shortUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-100"
+                          className={btn}
                         >
                           Open
                         </a>
                         <CopyButton text={shortUrl} />
-                        <button
-                          onClick={() => startEdit(r)}
-                          className="rounded-lg border px-3 py-1.5 text-sm"
-                        >
+                        <button onClick={() => startEdit(r)} className={btn}>
                           Edit
                         </button>
-                        <button
-                          onClick={() => askDelete(r.id)}
-                          className="rounded-lg border px-3 py-1.5 text-sm text-red-600"
-                        >
+                        <button onClick={() => askDelete(r.id)} className={btnDanger}>
                           Delete
                         </button>
                       </div>
                     ) : (
                       <div className="flex gap-2 justify-self-start sm:justify-self-end">
-                        <button
-                          onClick={() => saveEdit(r.id)}
-                          className="rounded-lg border px-3 py-1.5 text-sm"
-                        >
+                        <button onClick={() => saveEdit(r.id)} className={btn}>
                           Save
                         </button>
-                        <button
-                          onClick={cancelEdit}
-                          className="rounded-lg border px-3 py-1.5 text-sm"
-                        >
+                        <button onClick={cancelEdit} className={btn}>
                           Cancel
                         </button>
                       </div>
@@ -432,11 +448,7 @@ export default function LinksPanel({
             {/* Load more */}
             {hasMore && (
               <div className="flex justify-center">
-                <button
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                  className="mt-3 rounded-lg border px-4 py-2 text-sm disabled:opacity-60"
-                >
+                <button onClick={loadMore} disabled={loadingMore} className={btn}>
                   {loadingMore ? "Loading…" : "Load more"}
                 </button>
               </div>
@@ -448,22 +460,16 @@ export default function LinksPanel({
       {/* Delete Confirmation Modal */}
       {pendingDeleteId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-zinc-900 p-6 shadow-xl border dark:border-zinc-700">
             <h3 className="text-lg font-semibold">Delete this link?</h3>
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-gray-600 dark:text-zinc-400">
               This action cannot be undone. The short link will stop working immediately.
             </p>
             <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={cancelDelete}
-                className="rounded-lg border px-3 py-1.5 text-sm"
-              >
+              <button onClick={cancelDelete} className={btn}>
                 Cancel
               </button>
-              <button
-                onClick={confirmDelete}
-                className="rounded-lg border px-3 py-1.5 text-sm bg-red-600 text-white hover:bg-red-700"
-              >
+              <button onClick={confirmDelete} className={btnDanger}>
                 Delete
               </button>
             </div>
