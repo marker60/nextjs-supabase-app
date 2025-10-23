@@ -1,40 +1,44 @@
-import { Button } from "@/components/ui/button"
-import Link from "next/link"
+// app/page.tsx
+import { redirect } from "next/navigation";
+import { createSupabaseServerClient } from "./lib/supabaseServer";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const supabase = createSupabaseServerClient();
+
+  const { data, error } = await supabase.auth.getSession();
+  const session = data?.session ?? null;
+
+  // If already logged in → go straight to dashboard
+  if (session) {
+    redirect("/dashboard");
+  }
+
+  // Public landing for logged-out visitors
   return (
-    <div className="flex min-h-svh flex-col">
-      <header className="border-b">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <h1 className="text-xl font-semibold">App</h1>
-          <nav className="flex items-center gap-4">
-            <Button asChild variant="ghost">
-              <Link href="/auth/login">Login</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/auth/sign-up">Sign up</Link>
-            </Button>
-          </nav>
-        </div>
-      </header>
+    <main className="mx-auto max-w-3xl px-4 py-12">
+      <h1 className="text-3xl font-bold">Welcome</h1>
+      <p className="mt-3 text-gray-600 dark:text-zinc-400">
+        Please log in or sign up to continue.
+      </p>
 
-      <main className="flex flex-1 flex-col items-center justify-center px-4">
-        <div className="max-w-2xl text-center">
-          <h2 className="text-4xl font-bold tracking-tight">Welcome to the App</h2>
-          <p className="mt-4 text-lg text-muted-foreground">
-            Create and manage your projects with ease. Get started by creating a new project or logging in to your
-            account.
-          </p>
-          <div className="mt-8 flex items-center justify-center gap-4">
-            <Button asChild size="lg">
-              <Link href="/new">Create New Project</Link>
-            </Button>
-            <Button asChild variant="outline" size="lg">
-              <Link href="/dashboard">Go to Dashboard</Link>
-            </Button>
-          </div>
-        </div>
-      </main>
-    </div>
-  )
+      <div className="mt-6 flex flex-wrap gap-3">
+        <a
+          href="/login"
+          className="rounded-lg border px-4 py-2 text-sm transition-colors
+                     bg-transparent text-gray-900 hover:bg-gray-100 hover:text-gray-900
+                     dark:text-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-white"
+        >
+          Log in
+        </a>
+        <a
+          href="/signup"
+          className="rounded-lg border px-4 py-2 text-sm transition-colors
+                     bg-transparent text-gray-900 hover:bg-gray-100 hover:text-gray-900
+                     dark:text-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-white"
+        >
+          Sign up
+        </a>
+      </div>
+    </main>
+  );
 }
