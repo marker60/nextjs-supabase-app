@@ -1,47 +1,25 @@
-// [LABEL: FILE] app/api/brief/[id]/route.ts
+// [FILE: app/api/brief/[id]/route.ts]
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server"; // import the admin client correctly
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/brief/[id]
- * Returns a single brief by id with minimal fields.
- * Uses service role so it works in Preview without auth friction.
- */
-export async function GET(
-  _req: Request,
-  ctx: { params: { id: string } }
-) {
-  try {
-    const id = (ctx.params?.id || "").trim();
-    if (!id || id === "<id>") {
-      return NextResponse.json(
-        { ok: false, error: "invalid id" },
-        { status: 400 }
-      );
-    }
+export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const { id } = params;
 
-    const { data, error } = await supabaseAdmin
-      .from("briefs")
-      .select("id, title, created_at")
-      .eq("id", id)
-      .single();
+  // Call supabaseAdmin to get the actual Supabase client
+  const supabase = supabaseAdmin();  // Corrected: Call the function to get the client instance
 
-    if (error) throw error;
-    if (!data) {
-      return NextResponse.json(
-        { ok: false, error: "not found" },
-        { status: 404 }
-      );
-    }
+  const { data, error } = await supabase
+    .from("briefs")
+    .select("id, title, created_at")
+    .eq("id", id)
+    .single();
 
-    return NextResponse.json({ ok: true, item: data });
-  } catch (e: any) {
-    return NextResponse.json(
-      { ok: false, error: e?.message ?? "Unknown error" },
-      { status: 500 }
-    );
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  return NextResponse.json(data);
 }
