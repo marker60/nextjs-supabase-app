@@ -7,3 +7,11 @@ export function createClient() {
 
   return supabaseCreateClient(supabaseUrl, supabaseAnon);
 }
+
+// [NEW] Export admin client with service key for privileged actions
+export function supabaseAdmin() {
+  const supabaseUrl = process.env.SUPABASE_URL!;  // Use service key URL if different
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;  // Secure service key
+
+  return supabaseCreateClient(supabaseUrl, supabaseServiceRoleKey);
+}
