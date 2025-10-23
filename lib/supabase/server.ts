@@ -1,15 +1,9 @@
-// [LABEL: FILE] lib/supabase/server.ts
-import { createClient } from "@supabase/supabase-js";
+// [FILE: lib/supabase/server.ts]
+import { createClient as supabaseCreateClient } from '@supabase/supabase-js';
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+export function createClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-if (!url) throw new Error("Missing env NEXT_PUBLIC_SUPABASE_URL");
-if (!serviceRoleKey) throw new Error("Missing env SUPABASE_SERVICE_ROLE_KEY");
-
-export const supabaseAdmin = createClient(url, serviceRoleKey, { auth: { persistSession: false } });
-
-// back-compat
-export function getSupabaseServer() {
-  return supabaseAdmin;
+  return supabaseCreateClient(supabaseUrl, supabaseAnon);
 }
