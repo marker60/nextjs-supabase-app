@@ -1,6 +1,7 @@
 // [FILE: app/draft/[id]/page.tsx]
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";  // Correct import
+import Link from "next/link";  // Import Link from next/link
 
 type DraftRow = {
   id: string;
@@ -33,7 +34,7 @@ export default async function DraftPage({ params }: { params: { id: string } }) 
       <h1>{draft.title}</h1>
       <p>{draft.content}</p>
       <p>Created on: {new Date(draft.created_at).toLocaleDateString()}</p>
-      <Link href="/drafts">Back to Drafts</Link>
+      <Link href="/drafts">Back to Drafts</Link> {/* Now Link is properly imported */}
     </div>
   );
 }
