@@ -1,25 +1,24 @@
-// [FILE: app/api/brief/[id]/route.ts]
+// app/api/brief/[id]/route.ts
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server"; // import the admin client correctly
+import { supabaseAdmin } from "@/lib/supabase/server"; // client object, do NOT call it
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+type Params = { params: { id: string } };
+
+export async function GET(_req: Request, { params }: Params) {
   const { id } = params;
 
-  // Call supabaseAdmin to get the actual Supabase client
-  const supabase = supabaseAdmin();  // Corrected: Call the function to get the client instance
-
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("briefs")
-    .select("id, title, created_at")
+    .select("*")
     .eq("id", id)
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  return NextResponse.json(data);
+  return NextResponse.json({ brief: data }, { status: 200 });
 }
