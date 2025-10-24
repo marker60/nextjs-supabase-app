@@ -1,43 +1,18 @@
-// [FILE: app/api/health/route.ts]
-// [LABEL: PURPOSE]
-// Health check endpoint to verify API is up and Supabase is reachable.
-// Fix: correctly INVOKE supabaseAdmin() to get a client instance before using .from(...)
-
+// app/api/health/route.ts
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server"; // client object (do not call)
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const checks: {
-    api: boolean;
-    supabase: { ok: boolean; error?: string; count?: number };
-  } = {
-    api: true,
-    supabase: { ok: false },
-  };
+  // Lightweight health check: count rows in a known table
+  const { error, count } = await supabaseAdmin
+    .from("links")
+    .select("*", { count: "exact", head: true });
 
-  try {
-    // IMPORTANT: call the function to get the Supabase client instance
-    const admin = supabaseAdmin();
-
-    const { error, count } = await admin
-      .from("links")
-      .select("id", { count: "exact", head: true });
-
-    if (error) {
-      checks.supabase.error = error.message ?? String(error);
-    } else {
-      checks.supabase.ok = true;
-      checks.supabase.count = count ?? 0;
-    }
-  } catch (err: any) {
-    checks.supabase.error = err?.message ?? String(err);
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
-
-  return NextResponse.json({
-    ok: checks.api && checks.supabase.ok,
-    checks,
-  });
+  return NextResponse.json({ ok: true, linksCount: count ?? 0 }, { status: 200 });
 }

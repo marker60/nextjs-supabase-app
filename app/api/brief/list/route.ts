@@ -1,27 +1,18 @@
-// [FILE: app/api/brief/list/route.ts]
+// app/api/brief/list/route.ts
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server"; // Import the admin client correctly
+import { supabaseAdmin } from "@/lib/supabase/server"; // client object (do not call)
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(req: Request) {
-  try {
-    // Corrected: Call supabaseAdmin() to get the client instance
-    const supabase = supabaseAdmin(); 
+export async function GET() {
+  const { data, error } = await supabaseAdmin
+    .from("briefs")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-    const { data, error } = await supabase
-      .from("briefs") // Now correctly using 'from' on the Supabase client instance
-      .select("id, title, created_at")
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json(data);
-  } catch (error) {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
+  return NextResponse.json({ briefs: data ?? [] }, { status: 200 });
 }

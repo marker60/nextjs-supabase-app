@@ -1,40 +1,32 @@
-// [FILE: app/draft/[id]/page.tsx]
-import { notFound } from "next/navigation";
-import { supabaseAdmin } from "@/lib/supabase/server";  // Correct import
-import Link from "next/link";  // Import Link from next/link
+// app/draft/[id]/page.tsx
+import { supabaseAdmin } from "@/lib/supabase/server"; // client object (do not call)
 
-type DraftRow = {
-  id: string;
-  title: string;
-  content: string;
-  created_at: string;
-};
+type PageProps = { params: { id: string } };
 
-export default async function DraftPage({ params }: { params: { id: string } }) {
+export default async function DraftPage({ params }: PageProps) {
   const { id } = params;
 
-  // Call supabaseAdmin() to get the actual Supabase client
-  const admin = supabaseAdmin();
-
-  // Fetch draft data based on ID
-  const { data, error } = await admin
+  const { data, error } = await supabaseAdmin
     .from("drafts")
-    .select("id, title, content, created_at")
+    .select("*")
     .eq("id", id)
     .single();
 
-  if (error || !data) {
-    return notFound(); // Handle the case if no draft is found
+  if (error) {
+    return (
+      <div className="p-6">
+        <h1 className="text-xl font-semibold">Draft</h1>
+        <p className="mt-2 text-red-600">Error: {error.message}</p>
+      </div>
+    );
   }
 
-  const draft: DraftRow = data;
-
   return (
-    <div>
-      <h1>{draft.title}</h1>
-      <p>{draft.content}</p>
-      <p>Created on: {new Date(draft.created_at).toLocaleDateString()}</p>
-      <Link href="/drafts">Back to Drafts</Link> {/* Now Link is properly imported */}
+    <div className="p-6">
+      <h1 className="text-xl font-semibold">Draft</h1>
+      <pre className="mt-4 whitespace-pre-wrap rounded-md border p-4">
+        {JSON.stringify(data, null, 2)}
+      </pre>
     </div>
   );
 }
