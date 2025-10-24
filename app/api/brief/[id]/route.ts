@@ -1,6 +1,6 @@
 // app/api/brief/[id]/route.ts
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server"; // client object, do NOT call it
+import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +10,13 @@ type Params = { params: { id: string } };
 export async function GET(_req: Request, { params }: Params) {
   const { id } = params;
 
-  const { data, error } = await supabaseAdmin
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data, error } = await supabase
     .from("briefs")
     .select("*")
     .eq("id", id)
