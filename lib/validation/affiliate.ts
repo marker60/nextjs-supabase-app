@@ -1,10 +1,7 @@
 // /lib/validation/affiliate.ts
 import { z } from "zod";
 
-/**
- * Accept simple string IDs for common networks and a free-form
- * "other" block in key=value lines (one per line).
- */
+/** Zod schema for affiliate accounts + parse "other" key=value lines */
 export const AffiliateAccountsSchema = z
   .object({
     amazon_tag: z.string().trim().max(64).optional(),
@@ -29,7 +26,6 @@ export const AffiliateAccountsSchema = z
           }
         });
     }
-
     return {
       amazon_tag: data.amazon_tag || "",
       ebay_campid: data.ebay_campid || "",

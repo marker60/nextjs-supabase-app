@@ -77,7 +77,7 @@ export default async function SettingsPage() {
             placeholder="yourtag-20"
             className="w-full rounded-md border px-3 py-2"
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs opacity-70">
             Example: <code>yourtag-20</code>
           </p>
         </div>
@@ -127,24 +127,21 @@ export default async function SettingsPage() {
                     .join("\n")
                 : ""
             }
-            placeholder={`network_key=value\nexample_network=YOUR_VALUE`}
+            placeholder={`network_key=value\nimpact_partnerId=12345`}
             rows={5}
             className="w-full rounded-md border px-3 py-2 font-mono text-sm"
           />
-          <p className="text-xs text-muted-foreground">
-            One per line as <code>key=value</code>. Example:{" "}
-            <code>impact_partnerId=12345</code>
+          <p className="text-xs opacity-70">
+            One per line as <code>key=value</code>.
           </p>
         </div>
 
-        <div>
-          <button
-            type="submit"
-            className="rounded-md bg-black px-4 py-2 text-white hover:opacity-90 dark:bg-white dark:text-black"
-          >
-            Save Settings
-          </button>
-        </div>
+        <button
+          type="submit"
+          className="rounded-md bg-black px-4 py-2 text-white hover:opacity-90 dark:bg-white dark:text-black"
+        >
+          Save Settings
+        </button>
       </form>
     </div>
   );
