@@ -1,50 +1,34 @@
-// app/dashboard/page.tsx
-import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "../lib/supabaseServer";
+// /app/dashboard/page.tsx
+import { createClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const supabase = createSupabaseServerClient();
-  const { data } = await supabase.auth.getSession();
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!data?.session) {
-    // Not logged in → send to login
-    redirect("/login");
+  if (!user) {
+    return (
+      <div className="p-6">
+        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <p className="mt-2">Please log in to view your dashboard.</p>
+      </div>
+    );
   }
 
-  const user = data.session.user;
+  // Example: read back the user's affiliate record so we can prove data roundtrip
+  const { data } = await supabase
+    .from("affiliate_accounts")
+    .select("amazon_tag, ebay_campid, cj_pid, shareasale_affiliate_id, updated_at")
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8 space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
-      <p className="text-gray-600 dark:text-zinc-400">
-        Welcome back{user?.email ? `, ${user.email}` : ""}.
-      </p>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <a
-          href="/brief"
-          className="rounded-xl border p-4 transition-colors
-                     bg-white hover:bg-gray-100
-                     dark:bg-zinc-900 dark:border-zinc-700 dark:hover:bg-zinc-800"
-        >
-          <div className="text-lg font-semibold">Your Briefs</div>
-          <div className="mt-1 text-sm text-gray-600 dark:text-zinc-400">
-            Create and manage briefs.
-          </div>
-        </a>
-
-        <a
-          href="/links"
-          className="rounded-xl border p-4 transition-colors
-                     bg-white hover:bg-gray-100
-                     dark:bg-zinc-900 dark:border-zinc-700 dark:hover:bg-zinc-800"
-        >
-          <div className="text-lg font-semibold">Links</div>
-          <div className="mt-1 text-sm text-gray-600 dark:text-zinc-400">
-            Shorten, edit, and track performance.
-          </div>
-        </a>
-      </div>
-    </main>
+    <div className="p-6">
+      <h1 className="text-xl font-semibold">Dashboard</h1>
+      <pre className="mt-4 whitespace-pre-wrap rounded-md border p-4">
+        {JSON.stringify({ user: user.email, affiliate_accounts: data ?? null }, null, 2)}
+      </pre>
+    </div>
   );
 }
