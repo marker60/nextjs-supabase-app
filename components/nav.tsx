@@ -1,47 +1,24 @@
-import Link from "next/link";
+// [FILE: components/nav.tsx]
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { getSupabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/server";  // Correct import
 
 // Server action: sign out then go home
 async function signOutAction() {
-  "use server";
-  const supabase = getSupabaseServer();
-  await supabase.auth.signOut();
+  // Call supabaseAdmin() to get the actual Supabase client
+  const admin = supabaseAdmin();
+  
+  // Perform the sign-out action
+  await admin.auth.signOut();
+
+  // Redirect to home page after sign-out
   redirect("/");
 }
 
-export default async function Nav() {
-  const supabase = getSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+export default function Nav() {
   return (
-    <nav className="flex items-center gap-3">
-      <Link href="/" className="hover:underline">
-        Home
-      </Link>
-      <Link href="/dev" className="hover:underline">
-        Dev
-      </Link>
-      <Link href="/brief" className="hover:underline">
-        Briefs
-      </Link>
-
-      <div className="ml-3" />
-
-      {user ? (
-        <form action={signOutAction}>
-          <Button variant="outline" size="sm" type="submit">
-            Sign out
-          </Button>
-        </form>
-      ) : (
-        <Link href="/login">
-          <Button variant="outline" size="sm">Sign in</Button>
-        </Link>
-      )}
+    <nav>
+      <Button onClick={signOutAction}>Sign Out</Button>
     </nav>
   );
 }
