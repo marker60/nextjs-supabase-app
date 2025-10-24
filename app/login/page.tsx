@@ -1,26 +1,25 @@
 // [FILE: app/login/page.tsx]
-import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
+"use client";  // Mark this component as a client component
 
-export default async function LoginPage() {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+import { useState } from "react";
 
-  // If already logged in, redirect to the dashboard or wherever
-  if (user) {
-    redirect('/dashboard'); // Change this to where you want to redirect logged-in users
-  }
+export default function LoginPage() {
+  const [email, setEmail] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // handle login logic
+  };
 
   return (
-    <main className="p-6">
-      <h1 className="text-2xl font-semibold">Login</h1>
-      {/* Login Form Goes Here */}
-      <button onClick={async () => {
-        // Trigger login flow (e.g., OAuth, email, etc.)
-        await supabase.auth.signInWithOAuth({ provider: 'google' }); // Example with Google Auth
-      }}>
-        Login with Google
-      </button>
-    </main>
+    <form onSubmit={handleSubmit}>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Enter email"
+      />
+      <button type="submit">Login</button>
+    </form>
   );
 }
