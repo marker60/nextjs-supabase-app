@@ -1,26 +1,27 @@
-// /app/login/page.tsx
+// /app/signup/page.tsx
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-async function signInAction(formData: FormData) {
+async function signUpAction(formData: FormData) {
   "use server";
   const supabase = createClient();
   const email = String(formData.get("email") || "").trim();
   const password = String(formData.get("password") || "");
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signUp({ email, password });
   if (error) {
-    // Surface auth error back on the page via search params
-    redirect(`/login?error=${encodeURIComponent(error.message)}`);
+    redirect(`/signup?error=${encodeURIComponent(error.message)}`);
   }
 
+  // If email confirmation is enabled, Supabase requires verifying email.
+  // For prototype, route to dashboard and rely on RLS to gate access if not confirmed.
   redirect("/dashboard");
 }
 
-export default async function LoginPage({
+export default async function SignUpPage({
   searchParams,
 }: {
   searchParams?: { error?: string };
@@ -30,9 +31,9 @@ export default async function LoginPage({
   return (
     <div className="min-h-[70vh] w-full grid place-items-center px-4">
       <div className="w-full max-w-md rounded-2xl border shadow-sm p-6 bg-white dark:bg-neutral-900">
-        <h1 className="text-2xl font-semibold">Welcome back</h1>
+        <h1 className="text-2xl font-semibold">Create account</h1>
         <p className="mt-1 text-sm opacity-75">
-          Sign in to access your dashboard.
+          Start tracking your affiliate links in minutes.
         </p>
 
         {errorMsg ? (
@@ -41,7 +42,7 @@ export default async function LoginPage({
           </div>
         ) : null}
 
-        <form action={signInAction} className="mt-6 space-y-4">
+        <form action={signUpAction} className="mt-6 space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Email</label>
             <input
@@ -59,9 +60,9 @@ export default async function LoginPage({
             <input
               name="password"
               type="password"
-              autoComplete="current-password"
+              autoComplete="new-password"
               required
-              placeholder="********"
+              placeholder="At least 6 characters"
               className="w-full rounded-md border px-3 py-2 outline-none focus:ring-2 ring-offset-0 ring-black/20 dark:ring-white/30 bg-white dark:bg-neutral-800 text-black dark:text-white"
             />
           </div>
@@ -70,14 +71,14 @@ export default async function LoginPage({
             type="submit"
             className="w-full rounded-md bg-black text-white py-2 font-medium hover:opacity-90 dark:bg-white dark:text-black"
           >
-            Sign in
+            Create account
           </button>
         </form>
 
         <p className="mt-4 text-sm">
-          New here?{" "}
-          <Link href="/signup" className="underline hover:opacity-80">
-            Create an account
+          Already have an account?{" "}
+          <Link href="/login" className="underline hover:opacity-80">
+            Sign in
           </Link>
         </p>
       </div>
