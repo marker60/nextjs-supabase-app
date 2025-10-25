@@ -1,12 +1,23 @@
-// app/draft/[id]/page.tsx
-import { supabaseAdmin } from "@/lib/supabase/server"; // client object (do not call)
+// /app/draft/[id]/page.tsx
+import { createClient } from "@/lib/supabase/server";
 
 type PageProps = { params: { id: string } };
 
 export default async function DraftPage({ params }: PageProps) {
   const { id } = params;
 
-  const { data, error } = await supabaseAdmin
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return (
+      <div className="p-6">
+        <h1 className="text-xl font-semibold">Draft</h1>
+        <p className="mt-2 text-red-600">You must be logged in.</p>
+      </div>
+    );
+  }
+
+  const { data, error } = await supabase
     .from("drafts")
     .select("*")
     .eq("id", id)

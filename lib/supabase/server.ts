@@ -1,7 +1,8 @@
 // /lib/supabase/server.ts
 import "server-only";
 import { cookies } from "next/headers";
-import { createServerClient, type SupabaseClient } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /** Cookie-bound server client (SSR, RLS enforced) */
 export function createClient(): SupabaseClient {
@@ -16,5 +17,5 @@ export function createClient(): SupabaseClient {
       set: (name: string, value: string, opts: any) => cookieStore.set({ name, value, ...opts }),
       remove: (name: string, opts: any) => cookieStore.set({ name, value: "", ...opts }),
     },
-  });
+  }) as unknown as SupabaseClient;
 }
