@@ -1,16 +1,60 @@
-// [LABEL: FILE] components/AuthPasswordTips.tsx
-"use client";
+// /components/nav.tsx
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 
-export default function PasswordTips() {
+/** Server Action: signs out current user */
+export async function signOutAction() {
+  "use server";
+  const supabase = createClient();
+  await supabase.auth.signOut();
+  redirect("/login");
+}
+
+export default async function Nav() {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
-    <div className="rounded-lg border p-3 text-sm space-y-1">
-      <div className="font-medium">Password tips</div>
-      <ul className="list-disc ml-5 space-y-1">
-        <li>Use at least 12 characters.</li>
-        <li>Try a passphrase (e.g., three or four random words).</li>
-        <li>Don’t reuse passwords from other sites.</li>
-        <li>Consider a password manager.</li>
-      </ul>
-    </div>
+    <nav className="flex items-center justify-between px-4 py-3 border-b">
+      <div className="flex items-center gap-4">
+        <Link href="/" className="font-semibold inline-block">AffiFlow</Link>
+        {user ? (
+          <>
+            <Link href="/dashboard" className="opacity-80 hover:opacity-100 inline-block">Dashboard</Link>
+            <Link href="/settings" className="opacity-80 hover:opacity-100 inline-block">Settings</Link>
+          </>
+        ) : null}
+      </div>
+
+      {/* Right side: auth controls */}
+      {user ? (
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            className="rounded-md bg-black px-3 py-1.5 text-white hover:opacity-90 dark:bg-white dark:text-black"
+          >
+            Sign out
+          </button>
+        </form>
+      ) : (
+        <div className="flex items-center gap-3">
+          <Link
+            href="/login"
+            className="inline-block rounded-md border px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            Log in
+          </Link>
+          <Link
+            href="/signup"
+            className="inline-block rounded-md bg-black text-white px-3 py-1.5 hover:opacity-90 dark:bg-white dark:text-black"
+          >
+            Sign up
+          </Link>
+        </div>
+      )}
+    </nav>
   );
 }

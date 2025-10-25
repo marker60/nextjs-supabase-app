@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
+/** Server Action: signs out current user */
 export async function signOutAction() {
   "use server";
   const supabase = createClient();
@@ -11,16 +12,48 @@ export async function signOutAction() {
 }
 
 export default async function Nav() {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <nav className="flex items-center justify-between px-4 py-3 border-b">
       <div className="flex items-center gap-4">
-        <Link href="/" className="font-semibold">AffiFlow</Link>
-        <Link href="/dashboard" className="opacity-80 hover:opacity-100">Dashboard</Link>
-        <Link href="/settings" className="opacity-80 hover:opacity-100">Settings</Link>
+        <Link href="/" className="font-semibold inline-block">AffiFlow</Link>
+        {user ? (
+          <>
+            <Link href="/dashboard" className="opacity-80 hover:opacity-100 inline-block">Dashboard</Link>
+            <Link href="/settings" className="opacity-80 hover:opacity-100 inline-block">Settings</Link>
+          </>
+        ) : null}
       </div>
-      <form action={signOutAction}>
-        <button className="rounded-md bg-black px-3 py-1.5 text-white dark:bg-white dark:text-black">Sign out</button>
-      </form>
+
+      {user ? (
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            className="rounded-md bg-black px-3 py-1.5 text-white hover:opacity-90 dark:bg-white dark:text-black"
+          >
+            Sign out
+          </button>
+        </form>
+      ) : (
+        <div className="flex items-center gap-3">
+          <Link
+            href="/login"
+            className="inline-block rounded-md border px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/10"
+          >
+            Log in
+          </Link>
+          <Link
+            href="/signup"
+            className="inline-block rounded-md bg-black text-white px-3 py-1.5 hover:opacity-90 dark:bg-white dark:text-black"
+          >
+            Sign up
+          </Link>
+        </div>
+      )}
     </nav>
   );
 }

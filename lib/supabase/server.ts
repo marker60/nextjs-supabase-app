@@ -14,11 +14,9 @@ export function createClient(): SupabaseClient {
 
   return createServerClient(url, anon, {
     cookies: {
-      // Read all cookies for this request
       getAll() {
         return cookieStore.getAll();
       },
-      // Write/overwrite cookies for this response
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value, options }) => {
           cookieStore.set(name, value, options);
