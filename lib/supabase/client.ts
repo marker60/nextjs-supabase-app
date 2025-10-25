@@ -1,24 +1,16 @@
-// [LABEL: FILE] lib/supabase/client.ts
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+// /lib/supabase/client.ts
+"use client";
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+import { createClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-if (!url) throw new Error("Missing env NEXT_PUBLIC_SUPABASE_URL");
-if (!anon) throw new Error("Missing env NEXT_PUBLIC_SUPABASE_ANON_KEY");
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// shared singleton
-export const supabase = createSupabaseClient(url, anon);
-
-// zero-arg back-compat
-export function createClient() {
-  return supabase;
+if (!url || !anon) {
+  // Fail loudly in dev; in prod this renders a simple message on the page.
+  // eslint-disable-next-line no-console
+  console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
 }
 
-// optional raw 2-arg factory if ever needed
-export const createRawClient = createSupabaseClient;
-
-// back-compat alias
-export function getSupabaseClient() {
-  return supabase;
-}
+export const supabaseBrowser: SupabaseClient = createClient(url, anon);
