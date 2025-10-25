@@ -8,7 +8,6 @@ const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 if (!url || !anon) {
-  // Helpful in dev if envs are missing
   // eslint-disable-next-line no-console
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
 }
@@ -16,7 +15,10 @@ if (!url || !anon) {
 /** Singleton browser client (use in Client Components) */
 export const supabaseBrowser: SupabaseClient = createSupabaseClient(url, anon);
 
-/** Named export to satisfy `import { createClient }` callers */
+/** Alias to satisfy imports like `import { supabase } from "@/lib/supabase/client"` */
+export const supabase = supabaseBrowser;
+
+/** Named export to satisfy callers using `createClient()` */
 export function createClient(): SupabaseClient {
   return supabaseBrowser;
 }
