@@ -12,10 +12,7 @@ async function signInAction(formData: FormData) {
   const password = String(formData.get("password") || "");
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
-    // Surface auth error back on the page via search params
-    redirect(`/login?error=${encodeURIComponent(error.message)}`);
-  }
+  if (error) redirect(`/login?error=${encodeURIComponent(error.message)}`);
 
   redirect("/dashboard");
 }
@@ -23,17 +20,22 @@ async function signInAction(formData: FormData) {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: { error?: string };
+  searchParams?: { error?: string; notice?: string };
 }) {
   const errorMsg = searchParams?.error;
+  const notice = searchParams?.notice;
 
   return (
     <div className="min-h-[70vh] w-full grid place-items-center px-4">
       <div className="w-full max-w-md rounded-2xl border shadow-sm p-6 bg-white dark:bg-neutral-900">
         <h1 className="text-2xl font-semibold">Welcome back</h1>
-        <p className="mt-1 text-sm opacity-75">
-          Sign in to access your dashboard.
-        </p>
+        <p className="mt-1 text-sm opacity-75">Sign in to access your dashboard.</p>
+
+        {notice ? (
+          <div className="mt-4 rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-800 dark:bg-blue-900/30 dark:text-blue-100">
+            {notice}
+          </div>
+        ) : null}
 
         {errorMsg ? (
           <div className="mt-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-200">

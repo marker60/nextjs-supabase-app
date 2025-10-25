@@ -12,13 +12,14 @@ async function signUpAction(formData: FormData) {
   const password = String(formData.get("password") || "");
 
   const { error } = await supabase.auth.signUp({ email, password });
+
   if (error) {
     redirect(`/signup?error=${encodeURIComponent(error.message)}`);
   }
 
-  // If email confirmation is enabled, Supabase requires verifying email.
-  // For prototype, route to dashboard and rely on RLS to gate access if not confirmed.
-  redirect("/dashboard");
+  // Most Supabase projects require email confirmation for new users.
+  // For a reliable prototype UX, always send them to login with a notice.
+  redirect(`/login?notice=${encodeURIComponent("Account created. Check your email, then sign in.")}`);
 }
 
 export default async function SignUpPage({
