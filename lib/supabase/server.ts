@@ -11,11 +11,19 @@ export function createClient(): SupabaseClient {
   if (!url || !anon) throw new Error("Missing SUPABASE env vars");
 
   const cookieStore = cookies();
+
   return createServerClient(url, anon, {
     cookies: {
-      get: (name: string) => cookieStore.get(name)?.value,
-      set: (name: string, value: string, opts: any) => cookieStore.set({ name, value, ...opts }),
-      remove: (name: string, opts: any) => cookieStore.set({ name, value: "", ...opts }),
+      // Read all cookies for this request
+      getAll() {
+        return cookieStore.getAll();
+      },
+      // Write/overwrite cookies for this response
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) => {
+          cookieStore.set(name, value, options);
+        });
+      },
     },
   }) as unknown as SupabaseClient;
 }
